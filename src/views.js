@@ -233,6 +233,28 @@ function refreshCatItem(list, i) {
   if (el) { var t = document.createElement('div'); t.innerHTML = catItem(list, i); el.replaceWith(t.firstChild); }
 }
 
+/* ---------- źródła wyszukiwania (pośrednik + klucz Google) ---------- */
+function sourcesCard() {
+  var p = S.settings.proxy || '', g = S.settings.gkey || '';
+  var st = function (on, txt) { return '<span class="badge-s ' + (on ? 'done' : 'want') + '">' + (on ? ico('check') : '') + txt + '</span>'; };
+  return '<div class="sec"><h2>Źródła wyszukiwania</h2></div><div class="card settings src-card">' +
+    '<p style="margin:0 0 10px;font-size:13.5px" class="muted">Bez konfiguracji działają Google Books i Open Library – mają mało polskich wydań. ' +
+    'Własny, darmowy pośrednik na Twoim koncie Google dodaje <b style="color:var(--ink)">lubimyczytac.pl</b>, katalog <b style="color:var(--ink)">Biblioteki Narodowej</b> i rejestr <b style="color:var(--ink)">e-ISBN</b>.</p>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' + st(p, 'lubimyczytac') + st(p, 'Biblioteka Narodowa') + st(p, 'e-ISBN') + st(g, 'Google: własny klucz') + st(true, 'Open Library') + '</div>' +
+    '<label class="field" style="display:flex;border:0;padding:8px 0 0"><span>Adres pośrednika (…/exec)</span><div style="display:flex;gap:8px"><input id="setProxy" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(p) + '" autocomplete="off">' +
+    '<button class="pill sm" id="btnProxyTest" type="button">Sprawdź</button></div></label>' +
+    '<details style="margin:2px 0 12px"><summary class="more" style="cursor:pointer;list-style:none;display:inline-flex">Jak zrobić pośrednika? (ok. 3 min, na komputerze) ' + ico('down') + '</summary><ol class="steps">' +
+    '<li>Kliknij <button class="pill sm gold" id="btnCopyGs" type="button">Kopiuj kod pośrednika</button></li>' +
+    '<li>Wejdź na <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com</a> (prywatne konto Gmail – szkolne może blokować udostępnianie), usuń przykładowy kod i wklej skopiowany.</li>' +
+    '<li>Zapisz (Ctrl+S), nazwij projekt np. „Ex Libris – pośrednik”.</li>' +
+    '<li>Wybierz funkcję <b>test</b> i kliknij <b>▶ Uruchom</b> → zezwól na dostęp (Zaawansowane → Przejdź do projektu). To jednorazowa zgoda na łączenie z lubimyczytac i BN.</li>' +
+    '<li><b>Wdróż → Nowe wdrożenie</b> → typ: <b>Aplikacja internetowa</b>; Wykonuj jako: <b>Ja</b>; Kto ma dostęp: <b>Każdy</b> → Wdróż.</li>' +
+    '<li>Skopiuj „Adres URL aplikacji internetowej” (kończy się na <code>/exec</code>), wklej go powyżej i kliknij <b>Sprawdź</b>.</li></ol>' +
+    '<p class="faint" style="font-size:12px;margin:6px 0 0">Pośrednik działa na Twoim koncie, przepuszcza tylko lubimyczytac, BN i e-ISBN, a wyniki trzyma 6 godzin w pamięci, żeby nie obciążać serwisów. Adres wpisz na każdym urządzeniu (albo przenieś kopią).</p></details>' +
+    '<label class="field" style="display:flex;border:0;padding:0"><span>Klucz Google Books API (opcjonalnie)</span><input id="setGkey" placeholder="AIza…" value="' + esc(g) + '" autocomplete="off"></label>' +
+    '<p class="faint" style="font-size:12px;margin:0">Wspólny limit Google bez klucza bywa wyczerpany. Darmowy klucz: <a href="https://console.cloud.google.com/apis/library/books.googleapis.com" target="_blank" rel="noopener">console.cloud.google.com</a> → włącz „Books API” → Dane logowania → Utwórz klucz API.</p></div>';
+}
+
 /* ---------- TROFEA ---------- */
 function viewTrophy() {
   var x = xp(), r = rankOf(x), bs = BADGES(), got = bs.filter(function (b) { return b.got; }).length, done = byStatus('done');
@@ -249,6 +271,7 @@ function viewTrophy() {
   h += '<div class="sec"><h2>Drabina rang</h2><span class="more">XP = strony + 60 za książkę + 30 za pozycję z list + 40 za odznakę</span></div><div class="ladder">' + RANKS.map(function (k, i) {
     return '<div class="' + (i === r.i ? 'on' : i < r.i ? 'got' : '') + '">' + (i < r.i ? '✓ ' : '') + k[1] + '<span>' + fmt(k[0]) + ' XP</span></div>';
   }).join('') + '</div>';
+  h += sourcesCard();
   h += '<div class="sec"><h2>Ustawienia</h2></div><div class="card settings">' +
     '<label>Dzienny cel (strony)<input type="number" min="1" max="500" id="setDay" value="' + S.settings.dayGoal + '"></label>' +
     '<label>Roczny cel (książki)<input type="number" min="1" max="500" id="setYear" value="' + S.settings.yearGoal + '"></label>' +

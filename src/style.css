@@ -304,6 +304,14 @@ a { color: var(--sage); }
 .settings label { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-weight: 600; }
 .settings label:last-of-type { border-bottom: 0; }
 .settings input[type=number] { width: 86px; }
+.src-card label.field { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 6px; border-bottom: 0; font-weight: 400; }
+.src-card .field input { height: 42px; width: 100%; min-width: 0; }
+.src-card .field .pill { flex: none; height: 42px; }
+.src-card summary { margin: 4px 0; }
+.steps { margin: 10px 0 0; padding-left: 20px; font-size: 13.5px; color: var(--mute); }
+.steps li { margin-bottom: 8px; line-height: 1.45; }
+.steps b, .steps code { color: var(--ink); }
+.steps code { background: var(--card2); padding: 1px 5px; border-radius: 6px; }
 .btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 
 /* arkusz */

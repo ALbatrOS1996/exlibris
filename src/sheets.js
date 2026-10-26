@@ -78,6 +78,7 @@ function drawAdd() {
         .catch(function () { $('#scanBox').innerHTML = ''; toast('📷', 'Brak dostępu do aparatu'); });
     };
     $('#addRes').onclick = function (e) {
+      if (e.target.closest('[data-manual]')) { addState.mode = 'form'; addState.pre = { title: addState.q }; return drawAdd(); }
       var r = e.target.closest('[data-res]'); if (!r) return;
       var it = addState.results[+r.dataset.res];
       addState.pre = { title: it.title, author: it.author, year: it.year, pages: it.pages || '', cover: it.cover, isbn: it.isbn };
@@ -85,20 +86,33 @@ function drawAdd() {
     };
   } else bindForm(root, null);
 }
+function sourcesNote() {
+  var on = ['Google Books', 'Open Library'];
+  if (proxyUrl()) on = ['lubimyczytac', 'Biblioteka Narodowa', 'e-ISBN'].concat(on);
+  return 'Szukam w: ' + on.join(', ') + '.' + (proxyUrl() ? '' : ' Polskie źródła (lubimyczytac, BN) włączysz w Trofea → Źródła wyszukiwania.');
+}
 function resultsHtml() {
-  var r = addState.results;
-  if (r === 'loading') return '<div class="spin"></div>';
-  if (!r) return '<p class="muted" style="font-size:13px;margin:12px 4px">Szukam jednocześnie w Google Books i Open Library. Numer ISBN (10 lub 13 cyfr) daje najpewniejszy wynik' + (canScan() ? ' – możesz go też zeskanować aparatem.' : '.') + '</p>';
-  if (!r.length) return '<div class="empty"><b>Nic nie znalazłem</b>Spróbuj innego zapisu albo <button class="pill sm" data-mode2="form" onclick="addState.mode=\'form\';addState.pre={title:addState.q};drawAdd()">wpisz ręcznie</button></div>';
+  var r = addState.results, wait = addState.pending;
+  if (r === 'loading') return '<div class="spin"></div><p class="muted" style="text-align:center;font-size:12.5px">' + sourcesNote() + '</p>';
+  if (!r) return '<p class="muted" style="font-size:13px;margin:12px 4px">' + sourcesNote() + ' Numer ISBN (10 lub 13 cyfr) daje najpewniejszy wynik' + (canScan() ? ' – możesz go też zeskanować aparatem.' : '.') + '</p>';
+  if (!r.length && wait) return '<div class="spin"></div>';
+  if (!r.length) return '<div class="empty"><b>Nic nie znalazłem</b>Spróbuj innego zapisu albo <button class="pill sm" data-manual>wpisz ręcznie</button></div>';
   return r.map(function (it, i) {
     return '<div class="row" data-res="' + i + '">' + coverHtml(it) + '<div class="mid"><b>' + esc(it.title) + '</b><small>' + esc(it.author || 'autor nieznany') + '</small><small>' +
-      [it.year, it.pages ? it.pages + ' s.' : '', it.isbn ? 'ISBN ' + it.isbn : ''].filter(Boolean).join(' · ') + '</small></div><div class="end"><span class="pill sm">Wybierz</span></div></div>';
-  }).join('');
+      [it.year, it.pages ? it.pages + ' s.' : '', it.isbn ? 'ISBN ' + it.isbn : ''].filter(Boolean).join(' · ') + '</small><small class="faint">' + esc((it.vias || [it.via]).join(' + ')) + '</small></div>' +
+      '<div class="end"><span class="pill sm">Wybierz</span></div></div>';
+  }).join('') + (wait ? '<p class="muted" style="text-align:center;font-size:12.5px;display:flex;align-items:center;gap:8px;justify-content:center"><span class="spin" style="margin:0;width:16px;height:16px;border-width:2px"></span>Czekam jeszcze na ' + wait + ' ' + plural(wait, 'źródło', 'źródła', 'źródeł') + '…</p>' : '');
 }
 function runSearch(q) {
   q = (q || '').trim(); if (!q) return;
-  addState.q = q; addState.results = 'loading'; $('#addRes').innerHTML = resultsHtml();
-  searchBooks(q).then(function (r) { addState.results = r; var el = $('#addRes'); if (el) el.innerHTML = resultsHtml(); });
+  var id = (runSearch.n = (runSearch.n || 0) + 1);
+  addState.q = q; addState.results = 'loading'; addState.pending = 1; $('#addRes').innerHTML = resultsHtml();
+  var show = function (r, pending) {
+    if (id !== runSearch.n) return;
+    addState.results = r; addState.pending = pending;
+    var el = $('#addRes'); if (el) el.innerHTML = resultsHtml();
+  };
+  searchBooks(q, show).then(function (r) { show(r, 0); });
 }
 function formHtml(p) {
   return coverPickerHtml(p.title || p.cover ? { title: p.title || '', author: p.author || '', cover: p.cover || '' } : null) +

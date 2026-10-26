@@ -319,6 +319,14 @@ a { color: var(--sage); }
 .settings label { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-weight: 600; }
 .settings label:last-of-type { border-bottom: 0; }
 .settings input[type=number] { width: 86px; }
+.src-card label.field { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 6px; border-bottom: 0; font-weight: 400; }
+.src-card .field input { height: 42px; width: 100%; min-width: 0; }
+.src-card .field .pill { flex: none; height: 42px; }
+.src-card summary { margin: 4px 0; }
+.steps { margin: 10px 0 0; padding-left: 20px; font-size: 13.5px; color: var(--mute); }
+.steps li { margin-bottom: 8px; line-height: 1.45; }
+.steps b, .steps code { color: var(--ink); }
+.steps code { background: var(--card2); padding: 1px 5px; border-radius: 6px; }
 .btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 
 /* arkusz */
@@ -485,6 +493,9 @@ input[type=range] { width: 100%; accent-color: var(--sage); }
     <symbol id="i-seal" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="var(--sage)"/><circle cx="20" cy="20" r="13.5" fill="none" stroke="var(--on-sage)" stroke-width="1.2" stroke-dasharray="2 2.2" opacity=".55"/><path d="M13 27.5V13.5h8.5M13 20h6.5M13 27.5h8.5M23.5 13.5l5.5 14M29 13.5l-5.5 14" fill="none" stroke="var(--on-sage)" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </defs>
 </svg>
+<script>
+var POSREDNIK = "/**\n * Ex Libris – pośrednik wyszukiwania (Google Apps Script, darmowy, działa na Twoim koncie Google).\n * Aplikacja w przeglądarce nie może sama pytać lubimyczytac.pl, katalogu Biblioteki Narodowej\n * ani rejestru e-ISBN – ten skrypt robi to za nią i odsyła krótką odpowiedź.\n *\n *   ?lc=<fraza>        wyszukiwanie w lubimyczytac.pl (tytuł, autor, okładka, strony, ISBN, rok)\n *   ?url=<adres>       surowa odpowiedź z data.bn.org.pl lub e-isbn.pl\n *   ?test=1            sprawdzenie, czy pośrednik działa\n */\nvar DOZWOLONE = ['data.bn.org.pl', 'e-isbn.pl', 'www.e-isbn.pl'];\nvar LC = 'https://lubimyczytac.pl';\nvar UA = { 'User-Agent': 'Mozilla/5.0 (Ex Libris; prywatny dziennik lektur)' };\n\nfunction doGet(e) {\n  var p = (e && e.parameter) || {};\n  if (p.test) return tekst('{\"ok\":true,\"wersja\":2}');\n  if (p.lc) return pamiec('lc:' + p.lc, function () { return JSON.stringify(szukajLC(p.lc)); });\n  var url = p.url || '';\n  var host = (url.match(/^https:\\/\\/([^\\/?#]+)/) || [])[1];\n  if (DOZWOLONE.indexOf(host) < 0) return tekst('{\"error\":\"niedozwolony adres\"}');\n  return pamiec(url, function () {\n    var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });\n    return r.getResponseCode() === 200 ? r.getContentText('UTF-8') : '';\n  });\n}\n\n/* wyniki z pamięci podręcznej (6 h), żeby nie męczyć serwisów tymi samymi zapytaniami */\nfunction pamiec(klucz, fn) {\n  var cache = CacheService.getScriptCache();\n  var k = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, klucz, Utilities.Charset.UTF_8));\n  var z = cache.get(k);\n  if (z) return tekst(z);\n  var body = fn();\n  if (body && body.length < 95000) cache.put(k, body, 21600);\n  return tekst(body || '{\"error\":\"brak odpowiedzi\"}');\n}\nfunction tekst(s) { return ContentService.createTextOutput(s).setMimeType(ContentService.MimeType.TEXT); }\n\n/* ---------- lubimyczytac.pl ---------- */\nfunction szukajLC(fraza) {\n  var r = UrlFetchApp.fetch(LC + '/szukaj/ksiazki?phrase=' + encodeURIComponent(fraza), { muteHttpExceptions: true, headers: UA });\n  if (r.getResponseCode() !== 200) return { error: 'lubimyczytac ' + r.getResponseCode(), items: [] };\n  var items = parsujWyniki(r.getContentText('UTF-8')).slice(0, 8);\n  // szczegóły (strony, ISBN, data, duża okładka) dla pierwszych 6 – równolegle\n  var top = items.slice(0, 6);\n  var odp = UrlFetchApp.fetchAll(top.map(function (it) { return { url: LC + it.path, muteHttpExceptions: true, headers: UA }; }));\n  odp.forEach(function (o, i) { if (o.getResponseCode() === 200) uzupelnij(top[i], parsujKsiazke(o.getContentText('UTF-8'))); });\n  return { items: items };\n}\nfunction parsujWyniki(html) {\n  var out = [];\n  html.split('class=\"book-card book-card--l').slice(1).forEach(function (blok) {\n    var link = blok.match(/href=\"(\\/ksiazka\\/\\d+\\/[^\"#]+)\"/) || blok.match(/action=\"(\\/ksiazka\\/\\d+\\/[^\"#]+)\"/);\n    var tyt = blok.match(/class=\"book-card__title\"[^>]*title=\"([^\"]*)\"/) || blok.match(/class=\"book-card__title\"[^>]*>([^<]*)</);\n    if (!link || !tyt) return;\n    var aut = [], re = /book-card__author\">([\\s\\S]*?)<\\/div>/, a = blok.match(re);\n    if (a) a[1].replace(/<a[^>]*>([^<]*)<\\/a>/g, function (_, n) { aut.push(encje(n).trim()); });\n    var img = blok.match(/<img[^>]+src=\"(https:\\/\\/s\\.lubimyczytac\\.pl\\/upload\\/books\\/[^\"]+)\"/);\n    out.push({ path: link[1], title: encje(tyt[1]).trim(), author: aut.join(', '),\n      cover: img && !/default-book/.test(img[1]) ? img[1].replace(/-\\d+x\\d+\\.jpg$/, '-352x500.jpg') : '', pages: 0, isbn: '', year: '' });\n  });\n  return out;\n}\nfunction parsujKsiazke(html) {\n  var res = {}, bloki = html.match(/<script type=\"application\\/ld\\+json\">([\\s\\S]*?)<\\/script>/g) || [];\n  bloki.forEach(function (b) {\n    try {\n      var j = JSON.parse(b.replace(/^<script[^>]*>/, '').replace(/<\\/script>$/, ''));\n      if (j['@type'] === 'Book') res = j;\n    } catch (e) {}\n  });\n  var pierwsze = html.match(/Data 1\\. wyd\\. pol\\.:<\\/dt>\\s*<dd>\\s*(\\d{4})/);\n  return { pages: +res.numberOfPages || 0, isbn: res.isbn || '', year: pierwsze ? pierwsze[1] : String(res.datePublished || '').slice(0, 4),\n    cover: res.image || '', series: res.isPartOfSeries ? res.isPartOfSeries.name : '' };\n}\nfunction uzupelnij(it, d) {\n  if (d.pages) it.pages = d.pages;\n  if (d.isbn && !/^0+[-0]*$/.test(d.isbn)) it.isbn = d.isbn;\n  if (d.year) it.year = d.year;\n  if (d.cover) it.cover = d.cover;\n  if (/default-book/.test(it.cover)) it.cover = '';\n  if (d.series) it.series = d.series;\n}\nfunction encje(s) {\n  return String(s).replace(/&quot;/g, '\"').replace(/&#0?39;/g, \"'\").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')\n    .replace(/&#(\\d+);/g, function (_, n) { return String.fromCharCode(+n); });\n}\n\n/* uruchom raz w edytorze (▶ Uruchom → test), żeby nadać skryptowi uprawnienia */\nfunction test() { Logger.log(JSON.stringify(szukajLC('Gottland')).slice(0, 600)); }\n";
+</script>
 <script>
 /* Klasyka literatur narodowych Europy: [region, kraj, tytuł, tytuł oryginalny, autor, data, opis] */
 var KANON = [
@@ -1654,7 +1665,7 @@ function importData(text) {
 
 </script>
 <script>
-/* Wyszukiwanie książek: Google Books + Open Library (oba bez klucza), skaner kodu ISBN */
+/* Wyszukiwanie książek: Google Books, Open Library, a przez własny pośrednik także lubimyczytac.pl, Biblioteka Narodowa i e-ISBN; skaner ISBN */
 function cleanIsbn(q) { return (q || '').replace(/[^0-9Xx]/g, '').toUpperCase(); }
 function isIsbn(q) {
   var s = cleanIsbn(q);
@@ -1669,7 +1680,8 @@ function getJSON(url, ms) {
 
 function googleBooks(q, isbn, extra) {
   var query = isbn ? 'isbn:' + cleanIsbn(q) : q;
-  var url = 'https://www.googleapis.com/books/v1/volumes?maxResults=15&printType=books&q=' + encodeURIComponent(query) + (extra || '');
+  var url = 'https://www.googleapis.com/books/v1/volumes?maxResults=15&printType=books&q=' + encodeURIComponent(query) + (extra || '') +
+    (S.settings.gkey ? '&key=' + encodeURIComponent(S.settings.gkey.trim()) : '');
   return getJSON(url).catch(function (e) {
     // limit zapytań bez klucza – jedna ponowna próba
     if (e.message === '429') return new Promise(function (r) { setTimeout(r, 1500); }).then(function () { return getJSON(url); });
@@ -1698,30 +1710,131 @@ function openLibrary(q, isbn) {
   }).catch(function () { return []; });
 }
 
-/* łączy wyniki, usuwa duplikaty, uzupełnia brakujące pola (okładka/strony) z drugiego źródła */
-function searchBooks(q) {
-  var isbn = isIsbn(q);
-  return Promise.all([googleBooks(q, isbn), openLibrary(q, isbn)]).then(function (rs) {
-    var out = [], idx = {};
-    rs[0].concat(rs[1]).forEach(function (r) {
+/* ---------- pośrednik (Google Apps Script): lubimyczytac.pl, Biblioteka Narodowa, e-ISBN ---------- */
+function proxyUrl() { return (S.settings.proxy || '').trim(); }
+function viaProxy(params, ms) {
+  var p = proxyUrl(); if (!p) return Promise.reject(new Error('brak pośrednika'));
+  var ctl = window.AbortController ? new AbortController() : null;
+  var t = ctl && setTimeout(function () { ctl.abort(); }, ms || 30000);
+  return fetch(p + (p.indexOf('?') < 0 ? '?' : '&') + params, ctl ? { signal: ctl.signal } : {})
+    .then(function (r) { clearTimeout(t); if (!r.ok) throw new Error(r.status); return r.text(); });
+}
+function lubimyczytac(q) {
+  return viaProxy('lc=' + encodeURIComponent(q)).then(function (txt) {
+    return (JSON.parse(txt).items || []).map(function (it) {
+      return { title: it.title, author: it.author, year: it.year || '', pages: it.pages || 0, cover: it.cover || '', isbn: (it.isbn || '').replace(/-/g, ''),
+        lang: 'pl', series: it.series || '', via: 'lubimyczytac' };
+    });
+  }).catch(function () { return []; });
+}
+function bnRecord(b) {
+  var f = function (tag, code) {
+    for (var i = 0; i < b.marc.fields.length; i++) {
+      var x = b.marc.fields[i][tag]; if (!x) continue;
+      for (var j = 0; j < x.subfields.length; j++) if (x.subfields[j][code]) return x.subfields[j][code];
+    }
+    return '';
+  };
+  var title = (f('245', 'a') + ' ' + f('245', 'b')).replace(/\s*[\/:;=.]\s*$/, '').replace(/\s*[\/:;]\s*$/, '').replace(/\s+/g, ' ').trim();
+  var au = f('100', 'a').replace(/[,.]\s*$/, ''), m = au.match(/^([^,]+),\s*(.+)$/);
+  var pages = (f('300', 'a').match(/(\d+)\s*(,\s*\[\d+\]\s*)?(s\.|stron)/) || [])[1];
+  return { title: title || b.title.split(' /')[0], author: m ? m[2] + ' ' + m[1] : au, year: (b.publicationYear || '').slice(0, 4), pages: +pages || 0,
+    cover: '', isbn: cleanIsbn(f('020', 'a').split(' ')[0]), lang: b.language === 'polski' ? 'pl' : '', via: 'Biblioteka Narodowa' };
+}
+function bibNarodowa(q, isbn) {
+  if (!proxyUrl()) return Promise.resolve([]);
+  var base = 'https://data.bn.org.pl/api/networks/bibs.json?limit=15&kind=ksi%C4%85%C5%BCka&';
+  var qs = [];
+  if (isbn) qs.push('isbnIssn=' + cleanIsbn(q));
+  else {
+    var w = q.trim().split(/\s+/);
+    qs.push('title=' + encodeURIComponent(q.trim()) + '&language=polski');
+    if (w.length >= 2) qs.push('title=' + encodeURIComponent(w.slice(0, -1).join(' ')) + '&author=' + encodeURIComponent(w[w.length - 1]));
+    if (w.length >= 3) qs.push('title=' + encodeURIComponent(w.slice(0, -2).join(' ')) + '&author=' + encodeURIComponent(w.slice(-2).join(' ')));
+  }
+  return Promise.all(qs.map(function (x) {
+    return viaProxy('url=' + encodeURIComponent(base + x)).then(function (t) { return JSON.parse(t).bibs || []; }).catch(function () { return []; });
+  })).then(function (rs) {
+    var all = [].concat.apply([], rs).map(bnRecord).filter(function (r) { return r.title; });
+    all.sort(function (a, b) { return (b.lang === 'pl') - (a.lang === 'pl') || (b.year || '').localeCompare(a.year || ''); });
+    return all;
+  });
+}
+function eIsbn(q) {
+  if (!proxyUrl()) return Promise.resolve([]);
+  return viaProxy('url=' + encodeURIComponent('https://e-isbn.pl/IsbnWeb/api.xml?isbn=' + cleanIsbn(q))).then(function (xml) {
+    var d = new DOMParser().parseFromString(xml, 'text/xml'), out = [];
+    var tx = function (el, tag) { var x = el.getElementsByTagName(tag)[0]; return x ? x.textContent.trim() : ''; };
+    Array.prototype.forEach.call(d.getElementsByTagName('Product'), function (p) {
+      var pages = 0;
+      Array.prototype.forEach.call(p.getElementsByTagName('Extent'), function (e) { if (tx(e, 'ExtentType') === '00') pages = +tx(e, 'ExtentValue') || 0; });
+      var au = tx(p, 'PersonNameInverted'), m = au.match(/^([^,]+),\s*(.+)$/);
+      var sub = tx(p, 'Subtitle').replace(/\s*[\/:;]\s*$/, '');
+      out.push({ title: tx(p, 'TitleText').replace(/\s*[\/:;]\s*$/, '') + (sub && sub.length < 50 ? '. ' + sub : ''), author: m ? m[2] + ' ' + m[1] : au,
+        year: tx(p, 'Date').slice(0, 4), pages: pages, cover: '', isbn: cleanIsbn(q), lang: 'pl', via: 'e-ISBN' });
+    });
+    return out;
+  }).catch(function () { return []; });
+}
+
+/* łączy wyniki, usuwa duplikaty, uzupełnia brakujące pola (okładka/strony) z innych źródeł */
+var VIA_RANK = { 'lubimyczytac': 3, 'Biblioteka Narodowa': 1.5, 'e-ISBN': 2, 'Google Books': 1, 'Open Library': 0 };
+function mergeResults(lists, q, isbn) {
+  var out = [], idx = {};
+  lists.forEach(function (list) {
+    list.forEach(function (r) {
       if (!r.title) return;
-      var k = norm(r.title).slice(0, 40) + '|' + norm(r.author).split(' ').slice(-1)[0];
+      var k = isbn ? 'isbn' : norm(r.title).slice(0, 40) + '|' + norm(r.author).split(' ').slice(-1)[0];
       if (idx[k] != null) {
         var o = out[idx[k]];
-        if (!o.cover && r.cover) o.cover = r.cover;
-        if (!o.pages && r.pages) o.pages = r.pages;
-        if (!o.isbn && r.isbn) o.isbn = r.isbn;
-        if (!o.year && r.year) o.year = r.year;
+        ['cover', 'pages', 'isbn', 'year', 'author'].forEach(function (f) { if (!o[f] && r[f]) o[f] = r[f]; });
+        if (r.lang === 'pl') o.lang = 'pl';
+        if (r.via === 'lubimyczytac' && r.cover) o.cover = r.cover; // polskie okładki są trafniejsze
+        if (o.vias.indexOf(r.via) < 0) o.vias.push(r.via);
         return;
       }
-      idx[k] = out.length; out.push(r);
+      idx[k] = out.length; out.push(Object.assign({ vias: [r.via] }, r));
     });
-    // polskie wydania i te z okładką wyżej
-    out.forEach(function (r, i) { r._s = (r.lang === 'pl' ? 4 : 0) + (r.cover ? 2 : 0) + (r.pages ? 1 : 0) - i * .05; });
-    out.sort(function (a, b) { return b._s - a._s; });
-    if (isbn && out.length && !out[0].cover) out[0].cover = 'https://covers.openlibrary.org/b/isbn/' + cleanIsbn(q) + '-L.jpg?default=false';
-    return out;
   });
+  var nq = norm(q);
+  out.forEach(function (r, i) {
+    var nt = norm(r.title);
+    var via = Math.max.apply(null, r.vias.map(function (v) { return VIA_RANK[v] || 0; }));
+    // tytuł zawarty w zapytaniu (lub odwrotnie) – najsilniejszy sygnał
+    var hit = nt && (nq.indexOf(nt) >= 0 || nt.indexOf(nq) >= 0) ? 5 : 0;
+    r._s = hit + (r.lang === 'pl' ? 3 : 0) + (r.cover ? 2 : 0) + (r.pages ? 1 : 0) + via + r.vias.length * .5 - i * .02;
+  });
+  out.sort(function (a, b) { return b._s - a._s; });
+  if (isbn && out.length && !out[0].cover) out[0].cover = 'https://covers.openlibrary.org/b/isbn/' + cleanIsbn(q) + '-L.jpg?default=false';
+  return out.slice(0, 20);
+}
+/* onUpdate(lista, ileJeszczeCzeka) – wyniki pokazują się w miarę napływania */
+function searchBooks(q, onUpdate) {
+  var isbn = isIsbn(q), lists = [], pending;
+  var srcs = [googleBooks(q, isbn), openLibrary(q, isbn)];
+  if (proxyUrl()) {
+    var bn = bibNarodowa(q, isbn);
+    srcs.push(bn);
+    if (isbn) {
+      var ei = eIsbn(q);
+      srcs.push(ei);
+      // lubimyczytac nie szuka po ISBN – szukamy po tytule znalezionym w rejestrach
+      srcs.push(Promise.all([ei, bn]).then(function (r) {
+        var hit = r[0][0] || r[1][0]; if (!hit) return [];
+        return lubimyczytac(hit.title.split('. ')[0] + ' ' + (hit.author || '').split(' ').slice(-1)[0]).then(function (lc) {
+          var same = lc.filter(function (x) { return x.isbn === cleanIsbn(q); });
+          return (same.length ? same : lc.slice(0, 1)).map(function (x) { return Object.assign({}, x, { isbn: cleanIsbn(q) }); });
+        });
+      }));
+    } else srcs.push(lubimyczytac(q));
+  }
+  pending = srcs.length;
+  return Promise.all(srcs.map(function (p) {
+    return p.catch(function () { return []; }).then(function (r) {
+      lists.push(r); pending--;
+      if (onUpdate) onUpdate(mergeResults(lists, q, isbn), pending);
+    });
+  })).then(function () { return mergeResults(lists, q, isbn); });
 }
 
 /* dla książek dodanych z list: dociąga okładkę i liczbę stron w tle */
@@ -1729,14 +1842,20 @@ function enrichBook(b) {
   if (b.cover && b.pages) return Promise.resolve(false);
   var surname = (b.author || '').split(',')[0].split(' ').slice(-1)[0];
   var q = 'intitle:' + b.title + (surname && surname !== 'anonim' ? ' inauthor:' + surname : '');
-  return googleBooks(q, false, '&langRestrict=pl').then(function (r) {
-    return r.length ? r : googleBooks(b.title + ' ' + (surname || ''), false);
+  var plain = b.title + (surname && surname !== 'anonim' ? ' ' + surname : '');
+  // najpierw lubimyczytac (polskie okładki i strony), potem Google i Open Library
+  var lc = proxyUrl() ? lubimyczytac(plain) : Promise.resolve([]);
+  return lc.then(function (r0) {
+    if (r0.some(function (x) { return x.cover && x.pages; })) return r0;
+    return googleBooks(q, false, '&langRestrict=pl').then(function (r) {
+      return r.length ? r : googleBooks(plain, false);
+    }).then(function (r) { return r0.concat(r); });
   }).then(function (r) {
     if (!r.length || !r.some(function (x) { return x.cover; })) return openLibrary(b.title + ' ' + (surname || '')).then(function (o) { return r.concat(o); });
     return r;
   }).then(function (r) {
     var t = norm(b.title), changed = false;
-    var good = r.filter(function (x) { var n = norm(x.title); return n.indexOf(t) === 0 || t.indexOf(n) === 0; });
+    var good = r.filter(function (x) { var n = norm(x.title); return n && (n.indexOf(t) === 0 || t.indexOf(n) === 0); });
     if (!good.length) good = r.slice(0, 2);
     var withCover = good.filter(function (x) { return x.cover; })[0], withPages = good.filter(function (x) { return x.pages > 30; })[0];
     if (!b.cover && withCover) { b.cover = withCover.cover; changed = true; }
@@ -2164,6 +2283,28 @@ function refreshCatItem(list, i) {
   if (el) { var t = document.createElement('div'); t.innerHTML = catItem(list, i); el.replaceWith(t.firstChild); }
 }
 
+/* ---------- źródła wyszukiwania (pośrednik + klucz Google) ---------- */
+function sourcesCard() {
+  var p = S.settings.proxy || '', g = S.settings.gkey || '';
+  var st = function (on, txt) { return '<span class="badge-s ' + (on ? 'done' : 'want') + '">' + (on ? ico('check') : '') + txt + '</span>'; };
+  return '<div class="sec"><h2>Źródła wyszukiwania</h2></div><div class="card settings src-card">' +
+    '<p style="margin:0 0 10px;font-size:13.5px" class="muted">Bez konfiguracji działają Google Books i Open Library – mają mało polskich wydań. ' +
+    'Własny, darmowy pośrednik na Twoim koncie Google dodaje <b style="color:var(--ink)">lubimyczytac.pl</b>, katalog <b style="color:var(--ink)">Biblioteki Narodowej</b> i rejestr <b style="color:var(--ink)">e-ISBN</b>.</p>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' + st(p, 'lubimyczytac') + st(p, 'Biblioteka Narodowa') + st(p, 'e-ISBN') + st(g, 'Google: własny klucz') + st(true, 'Open Library') + '</div>' +
+    '<label class="field" style="display:flex;border:0;padding:8px 0 0"><span>Adres pośrednika (…/exec)</span><div style="display:flex;gap:8px"><input id="setProxy" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(p) + '" autocomplete="off">' +
+    '<button class="pill sm" id="btnProxyTest" type="button">Sprawdź</button></div></label>' +
+    '<details style="margin:2px 0 12px"><summary class="more" style="cursor:pointer;list-style:none;display:inline-flex">Jak zrobić pośrednika? (ok. 3 min, na komputerze) ' + ico('down') + '</summary><ol class="steps">' +
+    '<li>Kliknij <button class="pill sm gold" id="btnCopyGs" type="button">Kopiuj kod pośrednika</button></li>' +
+    '<li>Wejdź na <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com</a> (prywatne konto Gmail – szkolne może blokować udostępnianie), usuń przykładowy kod i wklej skopiowany.</li>' +
+    '<li>Zapisz (Ctrl+S), nazwij projekt np. „Ex Libris – pośrednik”.</li>' +
+    '<li>Wybierz funkcję <b>test</b> i kliknij <b>▶ Uruchom</b> → zezwól na dostęp (Zaawansowane → Przejdź do projektu). To jednorazowa zgoda na łączenie z lubimyczytac i BN.</li>' +
+    '<li><b>Wdróż → Nowe wdrożenie</b> → typ: <b>Aplikacja internetowa</b>; Wykonuj jako: <b>Ja</b>; Kto ma dostęp: <b>Każdy</b> → Wdróż.</li>' +
+    '<li>Skopiuj „Adres URL aplikacji internetowej” (kończy się na <code>/exec</code>), wklej go powyżej i kliknij <b>Sprawdź</b>.</li></ol>' +
+    '<p class="faint" style="font-size:12px;margin:6px 0 0">Pośrednik działa na Twoim koncie, przepuszcza tylko lubimyczytac, BN i e-ISBN, a wyniki trzyma 6 godzin w pamięci, żeby nie obciążać serwisów. Adres wpisz na każdym urządzeniu (albo przenieś kopią).</p></details>' +
+    '<label class="field" style="display:flex;border:0;padding:0"><span>Klucz Google Books API (opcjonalnie)</span><input id="setGkey" placeholder="AIza…" value="' + esc(g) + '" autocomplete="off"></label>' +
+    '<p class="faint" style="font-size:12px;margin:0">Wspólny limit Google bez klucza bywa wyczerpany. Darmowy klucz: <a href="https://console.cloud.google.com/apis/library/books.googleapis.com" target="_blank" rel="noopener">console.cloud.google.com</a> → włącz „Books API” → Dane logowania → Utwórz klucz API.</p></div>';
+}
+
 /* ---------- TROFEA ---------- */
 function viewTrophy() {
   var x = xp(), r = rankOf(x), bs = BADGES(), got = bs.filter(function (b) { return b.got; }).length, done = byStatus('done');
@@ -2180,6 +2321,7 @@ function viewTrophy() {
   h += '<div class="sec"><h2>Drabina rang</h2><span class="more">XP = strony + 60 za książkę + 30 za pozycję z list + 40 za odznakę</span></div><div class="ladder">' + RANKS.map(function (k, i) {
     return '<div class="' + (i === r.i ? 'on' : i < r.i ? 'got' : '') + '">' + (i < r.i ? '✓ ' : '') + k[1] + '<span>' + fmt(k[0]) + ' XP</span></div>';
   }).join('') + '</div>';
+  h += sourcesCard();
   h += '<div class="sec"><h2>Ustawienia</h2></div><div class="card settings">' +
     '<label>Dzienny cel (strony)<input type="number" min="1" max="500" id="setDay" value="' + S.settings.dayGoal + '"></label>' +
     '<label>Roczny cel (książki)<input type="number" min="1" max="500" id="setYear" value="' + S.settings.yearGoal + '"></label>' +
@@ -2272,6 +2414,7 @@ function drawAdd() {
         .catch(function () { $('#scanBox').innerHTML = ''; toast('📷', 'Brak dostępu do aparatu'); });
     };
     $('#addRes').onclick = function (e) {
+      if (e.target.closest('[data-manual]')) { addState.mode = 'form'; addState.pre = { title: addState.q }; return drawAdd(); }
       var r = e.target.closest('[data-res]'); if (!r) return;
       var it = addState.results[+r.dataset.res];
       addState.pre = { title: it.title, author: it.author, year: it.year, pages: it.pages || '', cover: it.cover, isbn: it.isbn };
@@ -2279,20 +2422,33 @@ function drawAdd() {
     };
   } else bindForm(root, null);
 }
+function sourcesNote() {
+  var on = ['Google Books', 'Open Library'];
+  if (proxyUrl()) on = ['lubimyczytac', 'Biblioteka Narodowa', 'e-ISBN'].concat(on);
+  return 'Szukam w: ' + on.join(', ') + '.' + (proxyUrl() ? '' : ' Polskie źródła (lubimyczytac, BN) włączysz w Trofea → Źródła wyszukiwania.');
+}
 function resultsHtml() {
-  var r = addState.results;
-  if (r === 'loading') return '<div class="spin"></div>';
-  if (!r) return '<p class="muted" style="font-size:13px;margin:12px 4px">Szukam jednocześnie w Google Books i Open Library. Numer ISBN (10 lub 13 cyfr) daje najpewniejszy wynik' + (canScan() ? ' – możesz go też zeskanować aparatem.' : '.') + '</p>';
-  if (!r.length) return '<div class="empty"><b>Nic nie znalazłem</b>Spróbuj innego zapisu albo <button class="pill sm" data-mode2="form" onclick="addState.mode=\'form\';addState.pre={title:addState.q};drawAdd()">wpisz ręcznie</button></div>';
+  var r = addState.results, wait = addState.pending;
+  if (r === 'loading') return '<div class="spin"></div><p class="muted" style="text-align:center;font-size:12.5px">' + sourcesNote() + '</p>';
+  if (!r) return '<p class="muted" style="font-size:13px;margin:12px 4px">' + sourcesNote() + ' Numer ISBN (10 lub 13 cyfr) daje najpewniejszy wynik' + (canScan() ? ' – możesz go też zeskanować aparatem.' : '.') + '</p>';
+  if (!r.length && wait) return '<div class="spin"></div>';
+  if (!r.length) return '<div class="empty"><b>Nic nie znalazłem</b>Spróbuj innego zapisu albo <button class="pill sm" data-manual>wpisz ręcznie</button></div>';
   return r.map(function (it, i) {
     return '<div class="row" data-res="' + i + '">' + coverHtml(it) + '<div class="mid"><b>' + esc(it.title) + '</b><small>' + esc(it.author || 'autor nieznany') + '</small><small>' +
-      [it.year, it.pages ? it.pages + ' s.' : '', it.isbn ? 'ISBN ' + it.isbn : ''].filter(Boolean).join(' · ') + '</small></div><div class="end"><span class="pill sm">Wybierz</span></div></div>';
-  }).join('');
+      [it.year, it.pages ? it.pages + ' s.' : '', it.isbn ? 'ISBN ' + it.isbn : ''].filter(Boolean).join(' · ') + '</small><small class="faint">' + esc((it.vias || [it.via]).join(' + ')) + '</small></div>' +
+      '<div class="end"><span class="pill sm">Wybierz</span></div></div>';
+  }).join('') + (wait ? '<p class="muted" style="text-align:center;font-size:12.5px;display:flex;align-items:center;gap:8px;justify-content:center"><span class="spin" style="margin:0;width:16px;height:16px;border-width:2px"></span>Czekam jeszcze na ' + wait + ' ' + plural(wait, 'źródło', 'źródła', 'źródeł') + '…</p>' : '');
 }
 function runSearch(q) {
   q = (q || '').trim(); if (!q) return;
-  addState.q = q; addState.results = 'loading'; $('#addRes').innerHTML = resultsHtml();
-  searchBooks(q).then(function (r) { addState.results = r; var el = $('#addRes'); if (el) el.innerHTML = resultsHtml(); });
+  var id = (runSearch.n = (runSearch.n || 0) + 1);
+  addState.q = q; addState.results = 'loading'; addState.pending = 1; $('#addRes').innerHTML = resultsHtml();
+  var show = function (r, pending) {
+    if (id !== runSearch.n) return;
+    addState.results = r; addState.pending = pending;
+    var el = $('#addRes'); if (el) el.innerHTML = resultsHtml();
+  };
+  searchBooks(q, show).then(function (r) { show(r, 0); });
 }
 function formHtml(p) {
   return coverPickerHtml(p.title || p.cover ? { title: p.title || '', author: p.author || '', cover: p.cover || '' } : null) +
@@ -2470,6 +2626,28 @@ document.addEventListener('click', function (e) {
     return;
   }
   if (t.closest('#fab')) return addSheet();
+  if (t.closest('#btnCopyGs')) {
+    var done = function () { toast('📋', 'Kod pośrednika skopiowany', 'Wklej go na script.google.com.'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(POSREDNIK).then(done, function () { prompt('Skopiuj kod:', POSREDNIK); });
+    else prompt('Skopiuj kod:', POSREDNIK);
+    return;
+  }
+  if (t.closest('#btnProxyTest')) {
+    S.settings.proxy = $('#setProxy').value.trim(); save();
+    if (!S.settings.proxy) return toast('🔌', 'Wklej najpierw adres pośrednika');
+    el = t.closest('#btnProxyTest'); el.textContent = '…';
+    viaProxy('test=1', 20000).then(function (txt) {
+      if (!/"ok":true/.test(txt)) throw new Error();
+      return lubimyczytac('Lalka Prus');
+    }).then(function (r) {
+      toast('✅', 'Pośrednik działa', r.length ? 'lubimyczytac: ' + r.length + ' wyników dla „Lalka Prus”.' : 'Odpowiada, ale lubimyczytac nic nie zwrócił – spróbuj za chwilę.', 4500);
+      confetti(40); render();
+    }).catch(function () {
+      el.textContent = 'Sprawdź';
+      toast('⚠️', 'Pośrednik nie odpowiada', 'Sprawdź, czy adres kończy się na /exec i czy dostęp ustawiono na „Każdy”.', 5000);
+    });
+    return;
+  }
   if (t.closest('#btnTheme')) { S.settings.theme = S.settings.theme === 'light' ? 'dark' : 'light'; save(); applyTheme(); if (V.tab === 'trophy') render(); return; }
   if (t.closest('#btnExport')) { exportData(); toast('💾', 'Kopia zapisana', 'Plik .json trafił do pobranych.'); return; }
   if (t.closest('#btnImport')) return $('#fileImport').click();
@@ -2504,6 +2682,8 @@ document.addEventListener('change', function (e) {
   if (t.id === 'setDay') { S.settings.dayGoal = Math.max(1, +t.value || 20); save(); toast('🎯', 'Dzienny cel: ' + S.settings.dayGoal + ' stron'); }
   if (t.id === 'setYear') { S.settings.yearGoal = Math.max(1, +t.value || 24); save(); toast('🎯', 'Roczny cel: ' + S.settings.yearGoal + ' książek'); }
   if (t.id === 'setTheme') { S.settings.theme = t.value; save(); applyTheme(); }
+  if (t.id === 'setProxy') { S.settings.proxy = t.value.trim(); save(); }
+  if (t.id === 'setGkey') { S.settings.gkey = t.value.trim(); save(); toast('🔑', S.settings.gkey ? 'Klucz Google zapisany' : 'Klucz Google usunięty'); render(); }
   if (t.id === 'fileImport' && t.files[0]) {
     var r = new FileReader();
     r.onload = function () {

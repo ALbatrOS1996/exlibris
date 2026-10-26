@@ -52,6 +52,28 @@ document.addEventListener('click', function (e) {
     return;
   }
   if (t.closest('#fab')) return addSheet();
+  if (t.closest('#btnCopyGs')) {
+    var done = function () { toast('📋', 'Kod pośrednika skopiowany', 'Wklej go na script.google.com.'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(POSREDNIK).then(done, function () { prompt('Skopiuj kod:', POSREDNIK); });
+    else prompt('Skopiuj kod:', POSREDNIK);
+    return;
+  }
+  if (t.closest('#btnProxyTest')) {
+    S.settings.proxy = $('#setProxy').value.trim(); save();
+    if (!S.settings.proxy) return toast('🔌', 'Wklej najpierw adres pośrednika');
+    el = t.closest('#btnProxyTest'); el.textContent = '…';
+    viaProxy('test=1', 20000).then(function (txt) {
+      if (!/"ok":true/.test(txt)) throw new Error();
+      return lubimyczytac('Lalka Prus');
+    }).then(function (r) {
+      toast('✅', 'Pośrednik działa', r.length ? 'lubimyczytac: ' + r.length + ' wyników dla „Lalka Prus”.' : 'Odpowiada, ale lubimyczytac nic nie zwrócił – spróbuj za chwilę.', 4500);
+      confetti(40); render();
+    }).catch(function () {
+      el.textContent = 'Sprawdź';
+      toast('⚠️', 'Pośrednik nie odpowiada', 'Sprawdź, czy adres kończy się na /exec i czy dostęp ustawiono na „Każdy”.', 5000);
+    });
+    return;
+  }
   if (t.closest('#btnTheme')) { S.settings.theme = S.settings.theme === 'light' ? 'dark' : 'light'; save(); applyTheme(); if (V.tab === 'trophy') render(); return; }
   if (t.closest('#btnExport')) { exportData(); toast('💾', 'Kopia zapisana', 'Plik .json trafił do pobranych.'); return; }
   if (t.closest('#btnImport')) return $('#fileImport').click();
@@ -86,6 +108,8 @@ document.addEventListener('change', function (e) {
   if (t.id === 'setDay') { S.settings.dayGoal = Math.max(1, +t.value || 20); save(); toast('🎯', 'Dzienny cel: ' + S.settings.dayGoal + ' stron'); }
   if (t.id === 'setYear') { S.settings.yearGoal = Math.max(1, +t.value || 24); save(); toast('🎯', 'Roczny cel: ' + S.settings.yearGoal + ' książek'); }
   if (t.id === 'setTheme') { S.settings.theme = t.value; save(); applyTheme(); }
+  if (t.id === 'setProxy') { S.settings.proxy = t.value.trim(); save(); }
+  if (t.id === 'setGkey') { S.settings.gkey = t.value.trim(); save(); toast('🔑', S.settings.gkey ? 'Klucz Google zapisany' : 'Klucz Google usunięty'); render(); }
   if (t.id === 'fileImport' && t.files[0]) {
     var r = new FileReader();
     r.onload = function () {

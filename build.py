@@ -11,7 +11,8 @@ JS = ['kanon.js', 'czarne.js', 'core.js', 'api.js', 'ui.js', 'views.js', 'sheets
 def bundle(pwa):
     html = r('index.html')
     html = html.replace('<!--CSS-->', '<style>\n' + r('style.css') + '\n</style>')
-    html = html.replace('<!--JS-->', '\n'.join('<script>\n' + r(f).replace('</script', r'<\/script') + '\n</script>' for f in JS))
+    gs = 'var POSREDNIK = ' + json.dumps(r('posrednik.gs'), ensure_ascii=False) + ';'
+    html = html.replace('<!--JS-->', '\n'.join('<script>\n' + c.replace('</script', r'<\/script') + '\n</script>' for c in [gs] + [r(f) for f in JS]))
     if pwa:
         html = html.replace('<!--PWA-->', '<link rel="manifest" href="manifest.webmanifest">\n<link rel="icon" href="icon-192.png">\n<link rel="apple-touch-icon" href="apple-touch-icon.png">')
         html = html.replace('</body>', "<script>if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js');</script>\n</body>")
