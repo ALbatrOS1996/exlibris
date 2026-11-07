@@ -3,7 +3,7 @@ var KEY = 'exlibris.v1';
 var S = load();
 
 function blank() {
-  return { books: [], settings: { theme: 'dark', dayGoal: 20, yearGoal: 24 }, seenBadges: [], rank: 0 };
+  return { books: [], settings: { theme: 'dark', dayGoal: 20, yearGoal: 24, showCal: false }, seenBadges: [], rank: 0 };
 }
 function load() {
   try {

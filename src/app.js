@@ -44,7 +44,7 @@ document.addEventListener('click', function (e) {
     else ex = addFromCat(list, i, 'done');
     el.closest('.item').classList.add('done');
     buzz([20, 40, 20]); confetti(45);
-    toast('📜', 'Przeczytana: ' + esc(ex.title), 'Dodana do kalendarza z dzisiejszą datą – możesz ją zmienić w szczegółach.');
+    toast('📜', 'Przeczytana: ' + esc(ex.title), 'Zapisana z dzisiejszą datą ukończenia – możesz ją zmienić w szczegółach.');
     setTimeout(function () { refreshCatItem(list, i); }, 350);
     afterChange();
     // pasek kraju i licznik
@@ -108,6 +108,10 @@ document.addEventListener('change', function (e) {
   if (t.id === 'setDay') { S.settings.dayGoal = Math.max(1, +t.value || 20); save(); toast('🎯', 'Dzienny cel: ' + S.settings.dayGoal + ' stron'); }
   if (t.id === 'setYear') { S.settings.yearGoal = Math.max(1, +t.value || 24); save(); toast('🎯', 'Roczny cel: ' + S.settings.yearGoal + ' książek'); }
   if (t.id === 'setTheme') { S.settings.theme = t.value; save(); applyTheme(); }
+  if (t.id === 'setCal') {
+    S.settings.showCal = t.checked; save(); render();
+    toast('📅', t.checked ? 'Kalendarz włączony' : 'Kalendarz ukryty', t.checked ? 'Znajdziesz go na dolnym pasku.' : 'Daty ukończenia nadal się zapisują.');
+  }
   if (t.id === 'setProxy') { S.settings.proxy = t.value.trim(); save(); }
   if (t.id === 'setGkey') { S.settings.gkey = t.value.trim(); save(); toast('🔑', S.settings.gkey ? 'Klucz Google zapisany' : 'Klucz Google usunięty'); render(); }
   if (t.id === 'fileImport' && t.files[0]) {

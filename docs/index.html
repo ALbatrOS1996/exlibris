@@ -321,6 +321,11 @@ a { color: var(--sage); }
 .settings label { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-weight: 600; }
 .settings label:last-of-type { border-bottom: 0; }
 .settings input[type=number] { width: 86px; }
+.settings input.switch { width: 50px; height: 30px; padding: 0; border-radius: 30px; }
+.switch { appearance: none; -webkit-appearance: none; flex: none; width: 50px; height: 30px; border-radius: 30px; background: var(--card2); border: 1px solid var(--line); position: relative; cursor: pointer; transition: background .2s; margin: 0; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--faint); transition: transform .25s cubic-bezier(.3, 1.4, .5, 1), background .2s; }
+.switch:checked { background: var(--sage); border-color: transparent; }
+.switch:checked::after { transform: translateX(20px); background: var(--on-sage); }
 .src-card label.field { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 6px; border-bottom: 0; font-weight: 400; }
 .src-card .field input { height: 42px; width: 100%; min-width: 0; }
 .src-card .field .pill { flex: none; height: 42px; }
@@ -1407,7 +1412,7 @@ var KEY = 'exlibris.v1';
 var S = load();
 
 function blank() {
-  return { books: [], settings: { theme: 'dark', dayGoal: 20, yearGoal: 24 }, seenBadges: [], rank: 0 };
+  return { books: [], settings: { theme: 'dark', dayGoal: 20, yearGoal: 24, showCal: false }, seenBadges: [], rank: 0 };
 }
 function load() {
   try {
@@ -2055,6 +2060,10 @@ var V = { tab: 'shelf', libFilter: 'all', libQ: '', calY: new Date().getFullYear
   cat: { kanon: { q: '', f: 'all', open: {}, limit: {} }, czarne: { q: '', f: 'all', series: '', open: {}, limit: {} } } };
 
 function render() {
+  if (V.tab === 'cal' && !S.settings.showCal) V.tab = 'shelf';
+  var calBtn = $('#tabs [data-go="cal"]');
+  calBtn.hidden = !S.settings.showCal;
+  $('#tabs').style.gridTemplateColumns = 'repeat(' + (S.settings.showCal ? 5 : 4) + ', 1fr)';
   var v = $('#view'), fn = { shelf: viewShelf, cal: viewCal, kanon: function () { return viewCat('kanon'); }, czarne: function () { return viewCat('czarne'); }, trophy: viewTrophy }[V.tab];
   v.innerHTML = fn();
   $$('#tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.go === V.tab); });
@@ -2111,7 +2120,7 @@ function viewShelf() {
 
   var fin = finished().slice(0, 14);
   if (fin.length) {
-    h += '<div class="sec"><h2>Ostatnio ukończone</h2><button class="more" data-go="cal">kalendarz ' + ico('arrow') + '</button></div><div class="spines">' +
+    h += '<div class="sec"><h2>Ostatnio ukończone</h2>' + (S.settings.showCal ? '<button class="more" data-go="cal">kalendarz ' + ico('arrow') + '</button>' : '') + '</div><div class="spines">' +
       fin.map(function (b) { var d = parseIso(b.end); return '<div class="spine" data-open="' + b.id + '">' + coverHtml(b) + '<span class="tag">' + d.getDate() + ' ' + MON3[d.getMonth()].toUpperCase() + '</span><small>' + '★'.repeat(b.rating || 0) + '</small></div>'; }).join('') + '</div>';
   }
 
@@ -2327,6 +2336,7 @@ function viewTrophy() {
   h += '<div class="sec"><h2>Ustawienia</h2></div><div class="card settings">' +
     '<label>Dzienny cel (strony)<input type="number" min="1" max="500" id="setDay" value="' + S.settings.dayGoal + '"></label>' +
     '<label>Roczny cel (książki)<input type="number" min="1" max="500" id="setYear" value="' + S.settings.yearGoal + '"></label>' +
+    '<label>Kalendarz lektur<input type="checkbox" id="setCal" class="switch"' + (S.settings.showCal ? ' checked' : '') + '></label>' +
     '<label>Motyw<select id="setTheme" style="width:150px"><option value="dark">Atrament</option><option value="light"' + (S.settings.theme === 'light' ? ' selected' : '') + '>Pergamin</option></select></label>' +
     '<div class="btnrow"><button class="pill" id="btnExport">Zapisz kopię</button><button class="pill ghost" id="btnImport">Wczytaj kopię</button>' +
     '<button class="pill ghost" id="btnReset" style="color:var(--rose)">Wyczyść wszystko</button><input type="file" id="fileImport" accept="application/json,.json" hidden></div>' +
@@ -2507,7 +2517,7 @@ function detailSheet(id) {
   h += '<div class="sec" style="margin-top:18px"><h2>Ocena i notatki</h2></div><div class="stars" id="dStars">' + [1, 2, 3, 4, 5].map(function (n) { return '<button data-n="' + n + '" class="' + (b.rating >= n ? 'on' : '') + '">' + ico('star') + '</button>'; }).join('') + '</div>' +
     '<label class="field" style="margin-top:10px"><textarea id="dNotes" placeholder="Cytaty, myśli, kontekst historyczny…">' + esc(b.notes) + '</textarea></label>';
   h += '<div class="two"><label class="field"><span>Początek</span><input type="date" id="dStartD" value="' + esc(b.start) + '"></label>' +
-    (b.status === 'done' ? '<label class="field"><span>Koniec (kalendarz)</span><input type="date" id="dEndD" value="' + esc(b.end) + '"></label>' : '<div></div>') + '</div>';
+    (b.status === 'done' ? '<label class="field"><span>Data ukończenia</span><input type="date" id="dEndD" value="' + esc(b.end) + '"></label>' : '<div></div>') + '</div>';
   if (b.log.length) {
     h += '<div class="sec"><h2>Dziennik</h2><span class="more">' + b.log.length + ' ' + plural(b.log.length, 'dzień', 'dni', 'dni') + '</span></div><div class="loglist">' +
       b.log.slice(-8).reverse().map(function (l) { return '<div><span>' + niceDate(l.d) + '</span><b>' + (l.p > 0 ? '+' : '') + l.p + ' s.</b></div>'; }).join('') + '</div>';
@@ -2567,7 +2577,7 @@ function bindDetail(root, b) {
     enrichBook(b).then(function (ch) { if (!ch) { b.cover = was; toast('🔍', 'Nie znalazłem okładki', 'Wklej ją albo wybierz plik.'); } else toast('🖼️', 'Okładka znaleziona'); save(); detailSheet(b.id); });
   };
   $('#eDel', root).onclick = function () {
-    if (!confirm('Usunąć „' + b.title + '” z półki? Zniknie też z kalendarza.')) return;
+    if (!confirm('Usunąć „' + b.title + '” z półki? Zniknie razem z postępem i datami.')) return;
     S.books = S.books.filter(function (x) { return x !== b; }); if (b.cover === 'idb') putCover(b.id, null); save(); closeSheet();
   };
 }
@@ -2620,7 +2630,7 @@ document.addEventListener('click', function (e) {
     else ex = addFromCat(list, i, 'done');
     el.closest('.item').classList.add('done');
     buzz([20, 40, 20]); confetti(45);
-    toast('📜', 'Przeczytana: ' + esc(ex.title), 'Dodana do kalendarza z dzisiejszą datą – możesz ją zmienić w szczegółach.');
+    toast('📜', 'Przeczytana: ' + esc(ex.title), 'Zapisana z dzisiejszą datą ukończenia – możesz ją zmienić w szczegółach.');
     setTimeout(function () { refreshCatItem(list, i); }, 350);
     afterChange();
     // pasek kraju i licznik
@@ -2684,6 +2694,10 @@ document.addEventListener('change', function (e) {
   if (t.id === 'setDay') { S.settings.dayGoal = Math.max(1, +t.value || 20); save(); toast('🎯', 'Dzienny cel: ' + S.settings.dayGoal + ' stron'); }
   if (t.id === 'setYear') { S.settings.yearGoal = Math.max(1, +t.value || 24); save(); toast('🎯', 'Roczny cel: ' + S.settings.yearGoal + ' książek'); }
   if (t.id === 'setTheme') { S.settings.theme = t.value; save(); applyTheme(); }
+  if (t.id === 'setCal') {
+    S.settings.showCal = t.checked; save(); render();
+    toast('📅', t.checked ? 'Kalendarz włączony' : 'Kalendarz ukryty', t.checked ? 'Znajdziesz go na dolnym pasku.' : 'Daty ukończenia nadal się zapisują.');
+  }
   if (t.id === 'setProxy') { S.settings.proxy = t.value.trim(); save(); }
   if (t.id === 'setGkey') { S.settings.gkey = t.value.trim(); save(); toast('🔑', S.settings.gkey ? 'Klucz Google zapisany' : 'Klucz Google usunięty'); render(); }
   if (t.id === 'fileImport' && t.files[0]) {

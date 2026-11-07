@@ -169,7 +169,7 @@ function detailSheet(id) {
   h += '<div class="sec" style="margin-top:18px"><h2>Ocena i notatki</h2></div><div class="stars" id="dStars">' + [1, 2, 3, 4, 5].map(function (n) { return '<button data-n="' + n + '" class="' + (b.rating >= n ? 'on' : '') + '">' + ico('star') + '</button>'; }).join('') + '</div>' +
     '<label class="field" style="margin-top:10px"><textarea id="dNotes" placeholder="Cytaty, myśli, kontekst historyczny…">' + esc(b.notes) + '</textarea></label>';
   h += '<div class="two"><label class="field"><span>Początek</span><input type="date" id="dStartD" value="' + esc(b.start) + '"></label>' +
-    (b.status === 'done' ? '<label class="field"><span>Koniec (kalendarz)</span><input type="date" id="dEndD" value="' + esc(b.end) + '"></label>' : '<div></div>') + '</div>';
+    (b.status === 'done' ? '<label class="field"><span>Data ukończenia</span><input type="date" id="dEndD" value="' + esc(b.end) + '"></label>' : '<div></div>') + '</div>';
   if (b.log.length) {
     h += '<div class="sec"><h2>Dziennik</h2><span class="more">' + b.log.length + ' ' + plural(b.log.length, 'dzień', 'dni', 'dni') + '</span></div><div class="loglist">' +
       b.log.slice(-8).reverse().map(function (l) { return '<div><span>' + niceDate(l.d) + '</span><b>' + (l.p > 0 ? '+' : '') + l.p + ' s.</b></div>'; }).join('') + '</div>';
@@ -229,7 +229,7 @@ function bindDetail(root, b) {
     enrichBook(b).then(function (ch) { if (!ch) { b.cover = was; toast('🔍', 'Nie znalazłem okładki', 'Wklej ją albo wybierz plik.'); } else toast('🖼️', 'Okładka znaleziona'); save(); detailSheet(b.id); });
   };
   $('#eDel', root).onclick = function () {
-    if (!confirm('Usunąć „' + b.title + '” z półki? Zniknie też z kalendarza.')) return;
+    if (!confirm('Usunąć „' + b.title + '” z półki? Zniknie razem z postępem i datami.')) return;
     S.books = S.books.filter(function (x) { return x !== b; }); if (b.cover === 'idb') putCover(b.id, null); save(); closeSheet();
   };
 }

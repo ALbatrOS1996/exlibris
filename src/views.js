@@ -3,6 +3,10 @@ var V = { tab: 'shelf', libFilter: 'all', libQ: '', calY: new Date().getFullYear
   cat: { kanon: { q: '', f: 'all', open: {}, limit: {} }, czarne: { q: '', f: 'all', series: '', open: {}, limit: {} } } };
 
 function render() {
+  if (V.tab === 'cal' && !S.settings.showCal) V.tab = 'shelf';
+  var calBtn = $('#tabs [data-go="cal"]');
+  calBtn.hidden = !S.settings.showCal;
+  $('#tabs').style.gridTemplateColumns = 'repeat(' + (S.settings.showCal ? 5 : 4) + ', 1fr)';
   var v = $('#view'), fn = { shelf: viewShelf, cal: viewCal, kanon: function () { return viewCat('kanon'); }, czarne: function () { return viewCat('czarne'); }, trophy: viewTrophy }[V.tab];
   v.innerHTML = fn();
   $$('#tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.go === V.tab); });
@@ -59,7 +63,7 @@ function viewShelf() {
 
   var fin = finished().slice(0, 14);
   if (fin.length) {
-    h += '<div class="sec"><h2>Ostatnio ukończone</h2><button class="more" data-go="cal">kalendarz ' + ico('arrow') + '</button></div><div class="spines">' +
+    h += '<div class="sec"><h2>Ostatnio ukończone</h2>' + (S.settings.showCal ? '<button class="more" data-go="cal">kalendarz ' + ico('arrow') + '</button>' : '') + '</div><div class="spines">' +
       fin.map(function (b) { var d = parseIso(b.end); return '<div class="spine" data-open="' + b.id + '">' + coverHtml(b) + '<span class="tag">' + d.getDate() + ' ' + MON3[d.getMonth()].toUpperCase() + '</span><small>' + '★'.repeat(b.rating || 0) + '</small></div>'; }).join('') + '</div>';
   }
 
@@ -275,6 +279,7 @@ function viewTrophy() {
   h += '<div class="sec"><h2>Ustawienia</h2></div><div class="card settings">' +
     '<label>Dzienny cel (strony)<input type="number" min="1" max="500" id="setDay" value="' + S.settings.dayGoal + '"></label>' +
     '<label>Roczny cel (książki)<input type="number" min="1" max="500" id="setYear" value="' + S.settings.yearGoal + '"></label>' +
+    '<label>Kalendarz lektur<input type="checkbox" id="setCal" class="switch"' + (S.settings.showCal ? ' checked' : '') + '></label>' +
     '<label>Motyw<select id="setTheme" style="width:150px"><option value="dark">Atrament</option><option value="light"' + (S.settings.theme === 'light' ? ' selected' : '') + '>Pergamin</option></select></label>' +
     '<div class="btnrow"><button class="pill" id="btnExport">Zapisz kopię</button><button class="pill ghost" id="btnImport">Wczytaj kopię</button>' +
     '<button class="pill ghost" id="btnReset" style="color:var(--rose)">Wyczyść wszystko</button><input type="file" id="fileImport" accept="application/json,.json" hidden></div>' +
