@@ -252,6 +252,7 @@ function sourcesCard() {
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' + st(p, 'lubimyczytac') + st(p, 'Biblioteka Narodowa') + st(p, 'e-ISBN') + st(g, 'Google: własny klucz') + st(true, 'Open Library') + '</div>' +
     '<label class="field" style="display:flex;border:0;padding:8px 0 0"><span>Adres pośrednika (…/exec)</span><div style="display:flex;gap:8px"><input id="setProxy" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(p) + '" autocomplete="off">' +
     '<button class="pill sm" id="btnProxyTest" type="button">Sprawdź</button></div></label>' +
+    '<button class="pill ghost" id="btnDiag" type="button" style="width:100%;margin:6px 0 4px">🔍 Diagnostyka źródeł</button>' +
     '<details style="margin:2px 0 12px"><summary class="more" style="cursor:pointer;list-style:none;display:inline-flex">Jak zrobić pośrednika? (ok. 3 min, na komputerze) ' + ico('down') + '</summary><ol class="steps">' +
     '<li>Kliknij <button class="pill sm gold" id="btnCopyGs" type="button">Kopiuj kod pośrednika</button></li>' +
     '<li>Wejdź na <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com</a> (prywatne konto Gmail – szkolne może blokować udostępnianie), usuń przykładowy kod i wklej skopiowany.</li>' +

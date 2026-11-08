@@ -6,7 +6,7 @@ D = os.path.dirname(os.path.abspath(__file__))
 S = os.path.join(D, 'src')
 r = lambda f: open(os.path.join(S, f), encoding='utf-8').read()
 
-JS = ['kanon.js', 'czarne.js', 'core.js', 'api.js', 'ui.js', 'views.js', 'sheets.js', 'app.js']
+JS = ['kanon.js', 'czarne.js', 'core.js', 'api.js', 'ui.js', 'views.js', 'sheets.js', 'diag.js', 'app.js']
 
 def bundle(pwa):
     html = r('index.html')

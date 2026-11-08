@@ -52,6 +52,7 @@ document.addEventListener('click', function (e) {
     return;
   }
   if (t.closest('#fab')) return addSheet();
+  if (t.closest('#btnDiag')) { var pi = $('#setProxy'); if (pi) { S.settings.proxy = pi.value.trim(); save(); } return diagSheet(); }
   if (t.closest('#btnCopyGs')) {
     var done = function () { toast('📋', 'Kod pośrednika skopiowany', 'Wklej go na script.google.com.'); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(POSREDNIK).then(done, function () { prompt('Skopiuj kod:', POSREDNIK); });
