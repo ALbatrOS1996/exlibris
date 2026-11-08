@@ -73,9 +73,15 @@ function drawAdd() {
     $('#addSearch').onsubmit = function (e) { e.preventDefault(); runSearch($('#addQ').value); };
     if (!a.results) setTimeout(function () { var i = $('#addQ'); if (i && matchMedia('(pointer:fine)').matches) i.focus(); }, 300);
     var sb = $('#btnScan'); if (sb) sb.onclick = function () {
-      $('#scanBox').innerHTML = '<div class="scan"><video muted></video></div><p class="muted" style="text-align:center;font-size:12.5px">Nakieruj aparat na kod kreskowy z tyłu książki</p>';
-      startScan($('#scanBox video'), function (code) { $('#scanBox').innerHTML = ''; buzz([20, 30, 20]); $('#addQ').value = code; runSearch(code); })
-        .catch(function () { $('#scanBox').innerHTML = ''; toast('📷', 'Brak dostępu do aparatu'); });
+      if (scanner) { stopScan(); $('#scanBox').innerHTML = ''; return; } // drugie kliknięcie zamyka aparat
+      $('#scanBox').innerHTML = '<div class="scan"><video muted></video></div><p class="muted" id="scanHint" style="text-align:center;font-size:12.5px">Nakieruj aparat na kod kreskowy z tyłu książki (zaczyna się od 978 lub 979). Trzymaj ok. 10–15 cm od okładki.</p>';
+      startScan($('#scanBox video'), function (code) { $('#scanBox').innerHTML = ''; buzz([20, 30, 20]); $('#addQ').value = code; runSearch(code); },
+        function (other) {
+          var h = $('#scanHint'); if (!h) return;
+          h.innerHTML = /^97[89]/.test(other) ? 'Kod nieczytelny – przytrzymaj telefon nieruchomo, bez odblasków.'
+            : 'Widzę kod <b>' + esc(other) + '</b>, ale to nie ISBN (np. naklejka z ceną). Szukaj kodu z numerem 978… lub 979…';
+        })
+        .catch(function () { $('#scanBox').innerHTML = ''; toast('📷', 'Brak dostępu do aparatu', 'Zezwól przeglądarce na aparat albo wpisz numer ISBN ręcznie.'); });
     };
     $('#addRes').onclick = function (e) {
       if (e.target.closest('[data-manual]')) { addState.mode = 'form'; addState.pre = { title: addState.q }; return drawAdd(); }
@@ -96,7 +102,13 @@ function resultsHtml() {
   if (r === 'loading') return '<div class="spin"></div><p class="muted" style="text-align:center;font-size:12.5px">' + sourcesNote() + '</p>';
   if (!r) return '<p class="muted" style="font-size:13px;margin:12px 4px">' + sourcesNote() + ' Numer ISBN (10 lub 13 cyfr) daje najpewniejszy wynik' + (canScan() ? ' – możesz go też zeskanować aparatem.' : '.') + '</p>';
   if (!r.length && wait) return '<div class="spin"></div>';
-  if (!r.length) return '<div class="empty"><b>Nic nie znalazłem</b>Spróbuj innego zapisu albo <button class="pill sm" data-manual>wpisz ręcznie</button></div>';
+  if (!r.length) {
+    var why = '';
+    if (isIsbn(addState.q) && !isbnValid(addState.q)) why = 'Ten numer ISBN ma błędną cyfrę kontrolną – sprawdź, czy dobrze go przepisałeś.<br>';
+    else if (isIsbn(addState.q) && !proxyUrl()) why = 'Bez pośrednika numer ISBN sprawdzam tylko w Open Library, która ma niewiele polskich wydań. Włącz Bibliotekę Narodową i e-ISBN w Trofea → Źródła wyszukiwania.<br>';
+    else if (!proxyUrl()) why = 'Polskie źródła (lubimyczytac, Biblioteka Narodowa) włączysz w Trofea → Źródła wyszukiwania.<br>';
+    return '<div class="empty"><b>Nic nie znalazłem</b>' + why + 'Spróbuj innego zapisu albo <button class="pill sm" data-manual>wpisz ręcznie</button></div>';
+  }
   return r.map(function (it, i) {
     return '<div class="row" data-res="' + i + '">' + coverHtml(it) + '<div class="mid"><b>' + esc(it.title) + '</b><small>' + esc(it.author || 'autor nieznany') + '</small><small>' +
       [it.year, it.pages ? it.pages + ' s.' : '', it.isbn ? 'ISBN ' + it.isbn : ''].filter(Boolean).join(' · ') + '</small><small class="faint">' + esc((it.vias || [it.via]).join(' + ')) + '</small></div>' +
