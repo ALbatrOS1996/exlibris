@@ -3,7 +3,7 @@ var KEY = 'exlibris.v1';
 var S = load();
 
 function blank() {
-  return { books: [], settings: { theme: 'dark', dayGoal: 20, yearGoal: 24, showCal: false }, seenBadges: [], rank: 0 };
+  return { books: [], settings: { theme: 'dark', dayGoal: 20, dayGoalFx: 25, yearGoal: 24, showCal: false }, seenBadges: [], rank: 0 };
 }
 function load() {
   try {
@@ -35,7 +35,7 @@ function uid() { return 'b' + Date.now().toString(36) + Math.random().toString(3
 function book(id) { for (var i = 0; i < S.books.length; i++) if (S.books[i].id === id) return S.books[i]; return null; }
 function newBook(o) {
   var b = Object.assign({ id: uid(), title: '', author: '', year: '', pages: 0, cur: 0, status: 'reading', start: today(), end: '',
-    cover: '', isbn: '', rating: 0, notes: '', src: null, log: [], added: today() }, o);
+    cover: '', isbn: '', rating: 0, notes: '', src: null, log: [], added: today(), lang: 'pl' }, o);
   if (b.status === 'done') { b.cur = b.pages; b.end = b.end || today(); }
   S.books.unshift(b); save();
   return b;
@@ -55,12 +55,12 @@ function setProgress(b, page) {
   page = Math.max(0, Math.min(b.pages || page, Math.round(page)));
   var delta = page - b.cur;
   if (!delta) return { delta: 0 };
-  var before = pct(b), dayBefore = pagesOn(today());
+  var before = pct(b), dayBefore = goalFrac(today());
   b.cur = page;
   var d = today(), last = b.log[b.log.length - 1];
   if (last && last.d === d) { last.p += delta; if (!last.p) b.log.pop(); } else b.log.push({ d: d, p: delta });
   if (b.status === 'want') { b.status = 'reading'; b.start = d; }
-  var res = { delta: delta, before: before, after: pct(b), dayBefore: dayBefore, dayAfter: pagesOn(d) };
+  var res = { delta: delta, before: before, after: pct(b), dayBefore: dayBefore, dayAfter: goalFrac(d) };
   if (b.pages && page >= b.pages && b.status !== 'done') { b.status = 'done'; b.end = d; res.finished = true; }
   else if (b.status === 'done' && page < b.pages) { b.status = 'reading'; b.end = ''; }
   save();
@@ -83,6 +83,32 @@ function dayMap() {
   return m;
 }
 function pagesOn(d) { return dayMap()[d] || 0; }
+
+/* ---------- cel dnia: osobny próg dla książek obcojęzycznych ---------- */
+var LANGS = [['pl', 'polski'], ['en', 'angielski'], ['de', 'niemiecki'], ['fr', 'francuski'], ['it', 'włoski'], ['es', 'hiszpański'],
+  ['ru', 'rosyjski'], ['uk', 'ukraiński'], ['cs', 'czeski'], ['la', 'łaciński'], ['xx', 'inny']];
+function langOptions(sel) { return LANGS.map(function (l) { return '<option value="' + l[0] + '"' + (l[0] === sel ? ' selected' : '') + '>' + l[1] + '</option>'; }).join(''); }
+/* kod z wyszukiwarek (np. "en", "pol", "") → nasz kod; nieznane = polski */
+function langCode(c) {
+  c = (c || '').toLowerCase().slice(0, 2);
+  if (c === 'po') return 'pl';
+  for (var i = 0; i < LANGS.length; i++) if (LANGS[i][0] === c) return c;
+  return c ? 'xx' : 'pl';
+}
+function langName(c) { for (var i = 0; i < LANGS.length; i++) if (LANGS[i][0] === c) return LANGS[i][1]; return c; }
+function isForeign(b) { return !!b.lang && b.lang !== 'pl'; }
+function goalFor(b) { return isForeign(b) ? (S.settings.dayGoalFx || 25) : (S.settings.dayGoal || 20); }
+/* {pl, fx} – strony danego dnia po polsku i w innych językach */
+function dayPagesSplit(d) {
+  var s = { pl: 0, fx: 0 };
+  S.books.forEach(function (b) { b.log.forEach(function (l) { if (l.d === d) s[isForeign(b) ? 'fx' : 'pl'] += l.p; }); });
+  return s;
+}
+/* jaka część celu dnia jest wykonana: każda strona to 1/cel jej języka, więc dni mieszane też się liczą */
+function goalFrac(d) {
+  var s = dayPagesSplit(d);
+  return Math.max(0, s.pl) / (S.settings.dayGoal || 20) + Math.max(0, s.fx) / (S.settings.dayGoalFx || 25);
+}
 function streak() {
   var m = dayMap(), d = today(), n = 0;
   if (!(m[d] > 0)) d = addDays(d, -1); // dzisiaj jeszcze można dociągnąć serię

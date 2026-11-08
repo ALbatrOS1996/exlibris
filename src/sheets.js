@@ -81,7 +81,7 @@ function drawAdd() {
       if (e.target.closest('[data-manual]')) { addState.mode = 'form'; addState.pre = { title: addState.q }; return drawAdd(); }
       var r = e.target.closest('[data-res]'); if (!r) return;
       var it = addState.results[+r.dataset.res];
-      addState.pre = { title: it.title, author: it.author, year: it.year, pages: it.pages || '', cover: it.cover, isbn: it.isbn };
+      addState.pre = { title: it.title, author: it.author, year: it.year, pages: it.pages || '', cover: it.cover, isbn: it.isbn, lang: langCode(it.lang) };
       addState.mode = 'form'; drawAdd();
     };
   } else bindForm(root, null);
@@ -120,7 +120,8 @@ function formHtml(p) {
     '<label class="field"><span>Autor</span><input name="author" value="' + esc(p.author || '') + '"></label>' +
     '<div class="two"><label class="field"><span>Rok wydania</span><input name="year" inputmode="numeric" value="' + esc(p.year || '') + '"></label>' +
     '<label class="field"><span>Liczba stron</span><input name="pages" type="number" min="1" inputmode="numeric" value="' + esc(p.pages || '') + '"></label></div>' +
-    '<label class="field"><span>Status</span><select name="status"><option value="reading">Czytam teraz</option><option value="done">Już przeczytana</option><option value="want">Na później</option></select></label>' +
+    '<div class="two"><label class="field"><span>Język książki</span><select name="lang">' + langOptions(p.lang || 'pl') + '</select></label>' +
+    '<label class="field"><span>Status</span><select name="status"><option value="reading">Czytam teraz</option><option value="done">Już przeczytana</option><option value="want">Na później</option></select></label></div>' +
     '<div class="two"><label class="field" id="fStart"><span>Początek</span><input type="date" name="start" value="' + today() + '"></label>' +
     '<label class="field" id="fCur"><span>Jestem na stronie</span><input type="number" min="0" name="cur" value="0"></label>' +
     '<label class="field" id="fEnd" hidden><span>Koniec</span><input type="date" name="end" value="' + today() + '"></label></div>' +
@@ -137,7 +138,7 @@ function bindForm(root, _) {
   f.onsubmit = function (e) {
     e.preventDefault();
     var pages = +f.pages.value || 0, st = f.status.value;
-    var b = newBook({ title: f.title.value.trim(), author: f.author.value.trim(), year: f.year.value.trim(), pages: pages, status: st,
+    var b = newBook({ title: f.title.value.trim(), author: f.author.value.trim(), year: f.year.value.trim(), pages: pages, status: st, lang: f.lang.value,
       start: st === 'want' ? '' : f.start.value || today(), end: st === 'done' ? f.end.value || today() : '', isbn: f.isbn.value });
     if (st === 'reading' && +f.cur.value) { b.cur = Math.min(pages || 1e9, +f.cur.value); }
     if (st === 'done' && !pages) b.cur = 0;
@@ -156,7 +157,8 @@ function detailSheet(id) {
   var b = book(id); if (!b) return;
   var src = b.src ? CATS[b.src.list] : null, lbl = { reading: 'czytam', done: 'przeczytana', want: 'na później' };
   var h = '<div class="detail-top">' + coverHtml(b) + '<div><h2>' + esc(b.title) + '</h2><div class="au">' + esc(b.author) + (b.year ? ' · ' + esc(b.year) : '') + '</div>' +
-    '<div class="src"><span class="badge-s ' + b.status + '" id="dStatus">' + lbl[b.status] + '</span>' + (src ? '<span class="badge-s want" style="color:var(--gold);background:color-mix(in srgb,var(--gold) 18%,transparent)">' + src.name + '</span>' : '') + '</div></div></div>';
+    '<div class="src"><span class="badge-s ' + b.status + '" id="dStatus">' + lbl[b.status] + '</span>' +
+    (isForeign(b) ? '<span class="badge-s want">🌍 ' + langName(b.lang) + ' · cel ' + goalFor(b) + ' s.</span>' : '') + (src ? '<span class="badge-s want" style="color:var(--gold);background:color-mix(in srgb,var(--gold) 18%,transparent)">' + src.name + '</span>' : '') + '</div></div></div>';
   h += '<div class="card prog-card" style="padding:16px">' + '<div id="dRing">' + ring(pct(b), 'big') + '</div><div class="ctl">' +
     (b.pages ? '<div class="pgin"><input id="dPage" type="number" inputmode="numeric" min="0" max="' + b.pages + '" value="' + b.cur + '"><span>/ ' + b.pages + ' stron</span></div>' +
       '<input type="range" id="dRange" min="0" max="' + b.pages + '" value="' + b.cur + '">' +
@@ -178,6 +180,7 @@ function detailSheet(id) {
     '<label class="field"><span>Tytuł</span><input id="eTitle" value="' + esc(b.title) + '"></label><label class="field"><span>Autor</span><input id="eAuthor" value="' + esc(b.author) + '"></label>' +
     '<div class="three"><label class="field"><span>Rok</span><input id="eYear" value="' + esc(b.year) + '"></label><label class="field"><span>Strony</span><input id="ePages" type="number" min="1" value="' + (b.pages || '') + '"></label>' +
     '<label class="field"><span>ISBN</span><input id="eIsbn" value="' + esc(b.isbn) + '"></label></div>' +
+    '<label class="field"><span>Język książki</span><select id="eLang">' + langOptions(b.lang || 'pl') + '</select></label>' +
     '<div class="btnrow"><button class="pill" id="eSave">Zapisz zmiany</button><button class="pill ghost" id="eFind">Znajdź okładkę</button><button class="pill ghost" id="eDel" style="color:var(--rose)">' + ico('trash') + 'Usuń</button></div></div></details>';
   var root = openSheet(h, function () { render(); });
   bindDetail(root, b);
@@ -218,7 +221,7 @@ function bindDetail(root, b) {
   var ed = $('#dEndD', root); if (ed) ed.onchange = function () { if (this.value) { b.end = this.value; save(); toast('📅', 'Data ukończenia: ' + niceDate(b.end)); } };
   bindCoverPicker(root, function () { return { title: $('#eTitle', root).value, author: $('#eAuthor', root).value }; }, function () { applyCover(b); save(); });
   $('#eSave', root).onclick = function () {
-    b.title = $('#eTitle', root).value.trim() || b.title; b.author = $('#eAuthor', root).value.trim(); b.year = $('#eYear', root).value.trim(); b.isbn = $('#eIsbn', root).value.trim();
+    b.title = $('#eTitle', root).value.trim() || b.title; b.author = $('#eAuthor', root).value.trim(); b.year = $('#eYear', root).value.trim(); b.isbn = $('#eIsbn', root).value.trim(); b.lang = $('#eLang', root).value;
     var p = +$('#ePages', root).value || 0;
     if (p !== b.pages) { b.pages = p; if (b.status === 'done') b.cur = p; else b.cur = Math.min(b.cur, p); }
     applyCover(b); save(); toast('✔️', 'Zapisano'); detailSheet(b.id);

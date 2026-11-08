@@ -1412,7 +1412,7 @@ var KEY = 'exlibris.v1';
 var S = load();
 
 function blank() {
-  return { books: [], settings: { theme: 'dark', dayGoal: 20, yearGoal: 24, showCal: false }, seenBadges: [], rank: 0 };
+  return { books: [], settings: { theme: 'dark', dayGoal: 20, dayGoalFx: 25, yearGoal: 24, showCal: false }, seenBadges: [], rank: 0 };
 }
 function load() {
   try {
@@ -1444,7 +1444,7 @@ function uid() { return 'b' + Date.now().toString(36) + Math.random().toString(3
 function book(id) { for (var i = 0; i < S.books.length; i++) if (S.books[i].id === id) return S.books[i]; return null; }
 function newBook(o) {
   var b = Object.assign({ id: uid(), title: '', author: '', year: '', pages: 0, cur: 0, status: 'reading', start: today(), end: '',
-    cover: '', isbn: '', rating: 0, notes: '', src: null, log: [], added: today() }, o);
+    cover: '', isbn: '', rating: 0, notes: '', src: null, log: [], added: today(), lang: 'pl' }, o);
   if (b.status === 'done') { b.cur = b.pages; b.end = b.end || today(); }
   S.books.unshift(b); save();
   return b;
@@ -1464,12 +1464,12 @@ function setProgress(b, page) {
   page = Math.max(0, Math.min(b.pages || page, Math.round(page)));
   var delta = page - b.cur;
   if (!delta) return { delta: 0 };
-  var before = pct(b), dayBefore = pagesOn(today());
+  var before = pct(b), dayBefore = goalFrac(today());
   b.cur = page;
   var d = today(), last = b.log[b.log.length - 1];
   if (last && last.d === d) { last.p += delta; if (!last.p) b.log.pop(); } else b.log.push({ d: d, p: delta });
   if (b.status === 'want') { b.status = 'reading'; b.start = d; }
-  var res = { delta: delta, before: before, after: pct(b), dayBefore: dayBefore, dayAfter: pagesOn(d) };
+  var res = { delta: delta, before: before, after: pct(b), dayBefore: dayBefore, dayAfter: goalFrac(d) };
   if (b.pages && page >= b.pages && b.status !== 'done') { b.status = 'done'; b.end = d; res.finished = true; }
   else if (b.status === 'done' && page < b.pages) { b.status = 'reading'; b.end = ''; }
   save();
@@ -1492,6 +1492,32 @@ function dayMap() {
   return m;
 }
 function pagesOn(d) { return dayMap()[d] || 0; }
+
+/* ---------- cel dnia: osobny próg dla książek obcojęzycznych ---------- */
+var LANGS = [['pl', 'polski'], ['en', 'angielski'], ['de', 'niemiecki'], ['fr', 'francuski'], ['it', 'włoski'], ['es', 'hiszpański'],
+  ['ru', 'rosyjski'], ['uk', 'ukraiński'], ['cs', 'czeski'], ['la', 'łaciński'], ['xx', 'inny']];
+function langOptions(sel) { return LANGS.map(function (l) { return '<option value="' + l[0] + '"' + (l[0] === sel ? ' selected' : '') + '>' + l[1] + '</option>'; }).join(''); }
+/* kod z wyszukiwarek (np. "en", "pol", "") → nasz kod; nieznane = polski */
+function langCode(c) {
+  c = (c || '').toLowerCase().slice(0, 2);
+  if (c === 'po') return 'pl';
+  for (var i = 0; i < LANGS.length; i++) if (LANGS[i][0] === c) return c;
+  return c ? 'xx' : 'pl';
+}
+function langName(c) { for (var i = 0; i < LANGS.length; i++) if (LANGS[i][0] === c) return LANGS[i][1]; return c; }
+function isForeign(b) { return !!b.lang && b.lang !== 'pl'; }
+function goalFor(b) { return isForeign(b) ? (S.settings.dayGoalFx || 25) : (S.settings.dayGoal || 20); }
+/* {pl, fx} – strony danego dnia po polsku i w innych językach */
+function dayPagesSplit(d) {
+  var s = { pl: 0, fx: 0 };
+  S.books.forEach(function (b) { b.log.forEach(function (l) { if (l.d === d) s[isForeign(b) ? 'fx' : 'pl'] += l.p; }); });
+  return s;
+}
+/* jaka część celu dnia jest wykonana: każda strona to 1/cel jej języka, więc dni mieszane też się liczą */
+function goalFrac(d) {
+  var s = dayPagesSplit(d);
+  return Math.max(0, s.pl) / (S.settings.dayGoal || 20) + Math.max(0, s.fx) / (S.settings.dayGoalFx || 25);
+}
 function streak() {
   var m = dayMap(), d = today(), n = 0;
   if (!(m[d] > 0)) d = addDays(d, -1); // dzisiaj jeszcze można dociągnąć serię
@@ -1989,8 +2015,7 @@ function celebrateProgress(b, res, ev) {
       if (m >= 50) confetti(m === 90 ? 70 : 40);
     }
   });
-  var g = S.settings.dayGoal;
-  if (g && res.dayBefore < g && res.dayAfter >= g) { setTimeout(function () { toast('🔥', 'Cel dnia osiągnięty!', 'Seria: ' + streak() + ' ' + plural(streak(), 'dzień', 'dni', 'dni') + '. ' + maxim(), 4200); confetti(50); buzz([30, 50, 30]); }, 500); }
+  if (res.dayBefore < 1 && res.dayAfter >= 1) { setTimeout(function () { toast('🔥', 'Cel dnia osiągnięty!', 'Seria: ' + streak() + ' ' + plural(streak(), 'dzień', 'dni', 'dni') + '. ' + maxim(), 4200); confetti(50); buzz([30, 50, 30]); }, 500); }
   afterChange();
 }
 var lastRank = null;
@@ -2107,16 +2132,21 @@ function viewShelf() {
     h += '<div class="reel">' + reading.map(function (b) {
       var p = pct(b);
       return '<article class="card now" data-id="' + b.id + '"><div class="now-top" data-open="' + b.id + '">' + coverHtml(b) +
-        '<div class="now-info"><h3>' + esc(b.title) + '</h3><div class="au">' + esc(b.author) + '</div>' +
+        '<div class="now-info"><h3>' + esc(b.title) + '</h3><div class="au">' + esc(b.author) + (isForeign(b) ? ' · 🌍 ' + langName(b.lang) : '') + '</div>' +
         '<div class="ring-wrap">' + ring(p) + '<small>' + (b.pages ? 'strona <b>' + b.cur + '</b><br>z ' + b.pages : 'brak liczby stron') + '</small></div></div></div>' +
         (b.pages ? '<div class="quick"><button data-add="5">+5</button><button data-add="10">+10</button><button data-add="25">+25</button><button class="page" data-open="' + b.id + '">Strona…</button></div>'
           : '<button class="pill gold" data-open="' + b.id + '">Podaj liczbę stron</button>') + '</article>';
     }).join('') + '</div>';
   } else h += '<div class="empty"><b>Pusty pulpit</b>Kliknij <b style="display:inline;font-size:inherit;color:var(--sage)">+</b>, by dodać książkę, albo zajrzyj do zakładek Kanon i Czarne.</div>';
 
-  h += '<div class="sec"><h2>Cel dnia</h2></div><div class="card goal">' + ring(Math.min(100, Math.round(todayP / g * 100)), '', todayP) +
-    '<div class="txt"><b>' + (todayP >= g ? 'Cel osiągnięty! 🎉' : 'Jeszcze ' + (g - todayP) + ' ' + plural(g - todayP, 'strona', 'strony', 'stron')) + '</b>' +
-    '<p>Dzienny cel: ' + g + ' stron · najdłuższa seria: ' + bestStreak() + ' ' + plural(bestStreak(), 'dzień', 'dni', 'dni') + '</p>' + weekStrip() + '</div></div>';
+  var frac = goalFrac(today()), gfx = S.settings.dayGoalFx || 25, rest = Math.max(0, 1 - frac);
+  var restPl = Math.ceil(rest * g - 1e-9), restFx = Math.ceil(rest * gfx - 1e-9);
+  var hasFx = reading.some(isForeign), hasPl = reading.some(function (b) { return !isForeign(b); }) || !reading.length;
+  var restTxt = hasFx && hasPl ? 'Jeszcze ' + restPl + ' ' + plural(restPl, 'strona', 'strony', 'stron') + ' po polsku albo ' + restFx + ' w obcym języku'
+    : 'Jeszcze ' + (hasFx ? restFx : restPl) + ' ' + plural(hasFx ? restFx : restPl, 'strona', 'strony', 'stron') + (hasFx ? ' w obcym języku' : '');
+  h += '<div class="sec"><h2>Cel dnia</h2></div><div class="card goal">' + ring(Math.min(100, Math.round(frac * 100)), '', todayP) +
+    '<div class="txt"><b>' + (frac >= 1 ? 'Cel osiągnięty! 🎉' : restTxt) + '</b>' +
+    '<p>Cel: ' + g + ' stron po polsku lub ' + gfx + ' w obcym języku · najdłuższa seria: ' + bestStreak() + ' ' + plural(bestStreak(), 'dzień', 'dni', 'dni') + '</p>' + weekStrip() + '</div></div>';
 
   var fin = finished().slice(0, 14);
   if (fin.length) {
@@ -2135,11 +2165,11 @@ function viewShelf() {
   return h;
 }
 function weekStrip() {
-  var m = dayMap(), g = S.settings.dayGoal || 20, out = '<div style="display:flex;gap:5px">';
+  var m = dayMap(), out = '<div style="display:flex;gap:5px">';
   for (var i = 6; i >= 0; i--) {
     var d = addDays(today(), -i), p = m[d] || 0, dt = parseIso(d);
     out += '<div title="' + d + ': ' + p + ' s." style="flex:1;text-align:center;font-size:10px;font-weight:800;color:var(--faint)"><div style="height:26px;border-radius:8px;margin-bottom:3px;background:' +
-      (p >= g ? 'var(--sage)' : p ? 'color-mix(in srgb,var(--sage) 40%,var(--card2))' : 'var(--card2)') + '"></div>' + 'NPWŚCPS'[dt.getDay()] + '</div>';
+      (goalFrac(d) >= 1 ? 'var(--sage)' : p ? 'color-mix(in srgb,var(--sage) 40%,var(--card2))' : 'var(--card2)') + '"></div>' + 'NPWŚCPS'[dt.getDay()] + '</div>';
   }
   return out + '</div>';
 }
@@ -2334,7 +2364,8 @@ function viewTrophy() {
   }).join('') + '</div>';
   h += sourcesCard();
   h += '<div class="sec"><h2>Ustawienia</h2></div><div class="card settings">' +
-    '<label>Dzienny cel (strony)<input type="number" min="1" max="500" id="setDay" value="' + S.settings.dayGoal + '"></label>' +
+    '<label>Dzienny cel – po polsku (strony)<input type="number" min="1" max="500" id="setDay" value="' + S.settings.dayGoal + '"></label>' +
+    '<label>Dzienny cel – w obcym języku (strony)<input type="number" min="1" max="500" id="setDayFx" value="' + (S.settings.dayGoalFx || 25) + '"></label>' +
     '<label>Roczny cel (książki)<input type="number" min="1" max="500" id="setYear" value="' + S.settings.yearGoal + '"></label>' +
     '<label>Kalendarz lektur<input type="checkbox" id="setCal" class="switch"' + (S.settings.showCal ? ' checked' : '') + '></label>' +
     '<label>Motyw<select id="setTheme" style="width:150px"><option value="dark">Atrament</option><option value="light"' + (S.settings.theme === 'light' ? ' selected' : '') + '>Pergamin</option></select></label>' +
@@ -2429,7 +2460,7 @@ function drawAdd() {
       if (e.target.closest('[data-manual]')) { addState.mode = 'form'; addState.pre = { title: addState.q }; return drawAdd(); }
       var r = e.target.closest('[data-res]'); if (!r) return;
       var it = addState.results[+r.dataset.res];
-      addState.pre = { title: it.title, author: it.author, year: it.year, pages: it.pages || '', cover: it.cover, isbn: it.isbn };
+      addState.pre = { title: it.title, author: it.author, year: it.year, pages: it.pages || '', cover: it.cover, isbn: it.isbn, lang: langCode(it.lang) };
       addState.mode = 'form'; drawAdd();
     };
   } else bindForm(root, null);
@@ -2468,7 +2499,8 @@ function formHtml(p) {
     '<label class="field"><span>Autor</span><input name="author" value="' + esc(p.author || '') + '"></label>' +
     '<div class="two"><label class="field"><span>Rok wydania</span><input name="year" inputmode="numeric" value="' + esc(p.year || '') + '"></label>' +
     '<label class="field"><span>Liczba stron</span><input name="pages" type="number" min="1" inputmode="numeric" value="' + esc(p.pages || '') + '"></label></div>' +
-    '<label class="field"><span>Status</span><select name="status"><option value="reading">Czytam teraz</option><option value="done">Już przeczytana</option><option value="want">Na później</option></select></label>' +
+    '<div class="two"><label class="field"><span>Język książki</span><select name="lang">' + langOptions(p.lang || 'pl') + '</select></label>' +
+    '<label class="field"><span>Status</span><select name="status"><option value="reading">Czytam teraz</option><option value="done">Już przeczytana</option><option value="want">Na później</option></select></label></div>' +
     '<div class="two"><label class="field" id="fStart"><span>Początek</span><input type="date" name="start" value="' + today() + '"></label>' +
     '<label class="field" id="fCur"><span>Jestem na stronie</span><input type="number" min="0" name="cur" value="0"></label>' +
     '<label class="field" id="fEnd" hidden><span>Koniec</span><input type="date" name="end" value="' + today() + '"></label></div>' +
@@ -2485,7 +2517,7 @@ function bindForm(root, _) {
   f.onsubmit = function (e) {
     e.preventDefault();
     var pages = +f.pages.value || 0, st = f.status.value;
-    var b = newBook({ title: f.title.value.trim(), author: f.author.value.trim(), year: f.year.value.trim(), pages: pages, status: st,
+    var b = newBook({ title: f.title.value.trim(), author: f.author.value.trim(), year: f.year.value.trim(), pages: pages, status: st, lang: f.lang.value,
       start: st === 'want' ? '' : f.start.value || today(), end: st === 'done' ? f.end.value || today() : '', isbn: f.isbn.value });
     if (st === 'reading' && +f.cur.value) { b.cur = Math.min(pages || 1e9, +f.cur.value); }
     if (st === 'done' && !pages) b.cur = 0;
@@ -2504,7 +2536,8 @@ function detailSheet(id) {
   var b = book(id); if (!b) return;
   var src = b.src ? CATS[b.src.list] : null, lbl = { reading: 'czytam', done: 'przeczytana', want: 'na później' };
   var h = '<div class="detail-top">' + coverHtml(b) + '<div><h2>' + esc(b.title) + '</h2><div class="au">' + esc(b.author) + (b.year ? ' · ' + esc(b.year) : '') + '</div>' +
-    '<div class="src"><span class="badge-s ' + b.status + '" id="dStatus">' + lbl[b.status] + '</span>' + (src ? '<span class="badge-s want" style="color:var(--gold);background:color-mix(in srgb,var(--gold) 18%,transparent)">' + src.name + '</span>' : '') + '</div></div></div>';
+    '<div class="src"><span class="badge-s ' + b.status + '" id="dStatus">' + lbl[b.status] + '</span>' +
+    (isForeign(b) ? '<span class="badge-s want">🌍 ' + langName(b.lang) + ' · cel ' + goalFor(b) + ' s.</span>' : '') + (src ? '<span class="badge-s want" style="color:var(--gold);background:color-mix(in srgb,var(--gold) 18%,transparent)">' + src.name + '</span>' : '') + '</div></div></div>';
   h += '<div class="card prog-card" style="padding:16px">' + '<div id="dRing">' + ring(pct(b), 'big') + '</div><div class="ctl">' +
     (b.pages ? '<div class="pgin"><input id="dPage" type="number" inputmode="numeric" min="0" max="' + b.pages + '" value="' + b.cur + '"><span>/ ' + b.pages + ' stron</span></div>' +
       '<input type="range" id="dRange" min="0" max="' + b.pages + '" value="' + b.cur + '">' +
@@ -2526,6 +2559,7 @@ function detailSheet(id) {
     '<label class="field"><span>Tytuł</span><input id="eTitle" value="' + esc(b.title) + '"></label><label class="field"><span>Autor</span><input id="eAuthor" value="' + esc(b.author) + '"></label>' +
     '<div class="three"><label class="field"><span>Rok</span><input id="eYear" value="' + esc(b.year) + '"></label><label class="field"><span>Strony</span><input id="ePages" type="number" min="1" value="' + (b.pages || '') + '"></label>' +
     '<label class="field"><span>ISBN</span><input id="eIsbn" value="' + esc(b.isbn) + '"></label></div>' +
+    '<label class="field"><span>Język książki</span><select id="eLang">' + langOptions(b.lang || 'pl') + '</select></label>' +
     '<div class="btnrow"><button class="pill" id="eSave">Zapisz zmiany</button><button class="pill ghost" id="eFind">Znajdź okładkę</button><button class="pill ghost" id="eDel" style="color:var(--rose)">' + ico('trash') + 'Usuń</button></div></div></details>';
   var root = openSheet(h, function () { render(); });
   bindDetail(root, b);
@@ -2566,7 +2600,7 @@ function bindDetail(root, b) {
   var ed = $('#dEndD', root); if (ed) ed.onchange = function () { if (this.value) { b.end = this.value; save(); toast('📅', 'Data ukończenia: ' + niceDate(b.end)); } };
   bindCoverPicker(root, function () { return { title: $('#eTitle', root).value, author: $('#eAuthor', root).value }; }, function () { applyCover(b); save(); });
   $('#eSave', root).onclick = function () {
-    b.title = $('#eTitle', root).value.trim() || b.title; b.author = $('#eAuthor', root).value.trim(); b.year = $('#eYear', root).value.trim(); b.isbn = $('#eIsbn', root).value.trim();
+    b.title = $('#eTitle', root).value.trim() || b.title; b.author = $('#eAuthor', root).value.trim(); b.year = $('#eYear', root).value.trim(); b.isbn = $('#eIsbn', root).value.trim(); b.lang = $('#eLang', root).value;
     var p = +$('#ePages', root).value || 0;
     if (p !== b.pages) { b.pages = p; if (b.status === 'done') b.cur = p; else b.cur = Math.min(b.cur, p); }
     applyCover(b); save(); toast('✔️', 'Zapisano'); detailSheet(b.id);
@@ -2692,6 +2726,7 @@ document.addEventListener('input', function (e) {
 document.addEventListener('change', function (e) {
   var t = e.target;
   if (t.id === 'setDay') { S.settings.dayGoal = Math.max(1, +t.value || 20); save(); toast('🎯', 'Dzienny cel: ' + S.settings.dayGoal + ' stron'); }
+  if (t.id === 'setDayFx') { S.settings.dayGoalFx = Math.max(1, +t.value || 25); save(); toast('🌍', 'Cel dla książek obcojęzycznych: ' + S.settings.dayGoalFx + ' stron'); }
   if (t.id === 'setYear') { S.settings.yearGoal = Math.max(1, +t.value || 24); save(); toast('🎯', 'Roczny cel: ' + S.settings.yearGoal + ' książek'); }
   if (t.id === 'setTheme') { S.settings.theme = t.value; save(); applyTheme(); }
   if (t.id === 'setCal') {

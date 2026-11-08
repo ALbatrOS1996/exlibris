@@ -1,5 +1,5 @@
 /* Service worker: praca offline (aplikacja, czcionki, obejrzane okładki) */
-var VERSION = '612ed39167';
+var VERSION = 'd611ac2a87';
 var CORE = 'exlibris-core-' + VERSION;
 var FONTS = 'exlibris-fonts-v1';
 var COVERS = 'exlibris-covers-v1';

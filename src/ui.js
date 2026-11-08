@@ -89,8 +89,7 @@ function celebrateProgress(b, res, ev) {
       if (m >= 50) confetti(m === 90 ? 70 : 40);
     }
   });
-  var g = S.settings.dayGoal;
-  if (g && res.dayBefore < g && res.dayAfter >= g) { setTimeout(function () { toast('🔥', 'Cel dnia osiągnięty!', 'Seria: ' + streak() + ' ' + plural(streak(), 'dzień', 'dni', 'dni') + '. ' + maxim(), 4200); confetti(50); buzz([30, 50, 30]); }, 500); }
+  if (res.dayBefore < 1 && res.dayAfter >= 1) { setTimeout(function () { toast('🔥', 'Cel dnia osiągnięty!', 'Seria: ' + streak() + ' ' + plural(streak(), 'dzień', 'dni', 'dni') + '. ' + maxim(), 4200); confetti(50); buzz([30, 50, 30]); }, 500); }
   afterChange();
 }
 var lastRank = null;

@@ -106,6 +106,7 @@ document.addEventListener('input', function (e) {
 document.addEventListener('change', function (e) {
   var t = e.target;
   if (t.id === 'setDay') { S.settings.dayGoal = Math.max(1, +t.value || 20); save(); toast('🎯', 'Dzienny cel: ' + S.settings.dayGoal + ' stron'); }
+  if (t.id === 'setDayFx') { S.settings.dayGoalFx = Math.max(1, +t.value || 25); save(); toast('🌍', 'Cel dla książek obcojęzycznych: ' + S.settings.dayGoalFx + ' stron'); }
   if (t.id === 'setYear') { S.settings.yearGoal = Math.max(1, +t.value || 24); save(); toast('🎯', 'Roczny cel: ' + S.settings.yearGoal + ' książek'); }
   if (t.id === 'setTheme') { S.settings.theme = t.value; save(); applyTheme(); }
   if (t.id === 'setCal') {

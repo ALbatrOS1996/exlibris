@@ -50,16 +50,21 @@ function viewShelf() {
     h += '<div class="reel">' + reading.map(function (b) {
       var p = pct(b);
       return '<article class="card now" data-id="' + b.id + '"><div class="now-top" data-open="' + b.id + '">' + coverHtml(b) +
-        '<div class="now-info"><h3>' + esc(b.title) + '</h3><div class="au">' + esc(b.author) + '</div>' +
+        '<div class="now-info"><h3>' + esc(b.title) + '</h3><div class="au">' + esc(b.author) + (isForeign(b) ? ' · 🌍 ' + langName(b.lang) : '') + '</div>' +
         '<div class="ring-wrap">' + ring(p) + '<small>' + (b.pages ? 'strona <b>' + b.cur + '</b><br>z ' + b.pages : 'brak liczby stron') + '</small></div></div></div>' +
         (b.pages ? '<div class="quick"><button data-add="5">+5</button><button data-add="10">+10</button><button data-add="25">+25</button><button class="page" data-open="' + b.id + '">Strona…</button></div>'
           : '<button class="pill gold" data-open="' + b.id + '">Podaj liczbę stron</button>') + '</article>';
     }).join('') + '</div>';
   } else h += '<div class="empty"><b>Pusty pulpit</b>Kliknij <b style="display:inline;font-size:inherit;color:var(--sage)">+</b>, by dodać książkę, albo zajrzyj do zakładek Kanon i Czarne.</div>';
 
-  h += '<div class="sec"><h2>Cel dnia</h2></div><div class="card goal">' + ring(Math.min(100, Math.round(todayP / g * 100)), '', todayP) +
-    '<div class="txt"><b>' + (todayP >= g ? 'Cel osiągnięty! 🎉' : 'Jeszcze ' + (g - todayP) + ' ' + plural(g - todayP, 'strona', 'strony', 'stron')) + '</b>' +
-    '<p>Dzienny cel: ' + g + ' stron · najdłuższa seria: ' + bestStreak() + ' ' + plural(bestStreak(), 'dzień', 'dni', 'dni') + '</p>' + weekStrip() + '</div></div>';
+  var frac = goalFrac(today()), gfx = S.settings.dayGoalFx || 25, rest = Math.max(0, 1 - frac);
+  var restPl = Math.ceil(rest * g - 1e-9), restFx = Math.ceil(rest * gfx - 1e-9);
+  var hasFx = reading.some(isForeign), hasPl = reading.some(function (b) { return !isForeign(b); }) || !reading.length;
+  var restTxt = hasFx && hasPl ? 'Jeszcze ' + restPl + ' ' + plural(restPl, 'strona', 'strony', 'stron') + ' po polsku albo ' + restFx + ' w obcym języku'
+    : 'Jeszcze ' + (hasFx ? restFx : restPl) + ' ' + plural(hasFx ? restFx : restPl, 'strona', 'strony', 'stron') + (hasFx ? ' w obcym języku' : '');
+  h += '<div class="sec"><h2>Cel dnia</h2></div><div class="card goal">' + ring(Math.min(100, Math.round(frac * 100)), '', todayP) +
+    '<div class="txt"><b>' + (frac >= 1 ? 'Cel osiągnięty! 🎉' : restTxt) + '</b>' +
+    '<p>Cel: ' + g + ' stron po polsku lub ' + gfx + ' w obcym języku · najdłuższa seria: ' + bestStreak() + ' ' + plural(bestStreak(), 'dzień', 'dni', 'dni') + '</p>' + weekStrip() + '</div></div>';
 
   var fin = finished().slice(0, 14);
   if (fin.length) {
@@ -78,11 +83,11 @@ function viewShelf() {
   return h;
 }
 function weekStrip() {
-  var m = dayMap(), g = S.settings.dayGoal || 20, out = '<div style="display:flex;gap:5px">';
+  var m = dayMap(), out = '<div style="display:flex;gap:5px">';
   for (var i = 6; i >= 0; i--) {
     var d = addDays(today(), -i), p = m[d] || 0, dt = parseIso(d);
     out += '<div title="' + d + ': ' + p + ' s." style="flex:1;text-align:center;font-size:10px;font-weight:800;color:var(--faint)"><div style="height:26px;border-radius:8px;margin-bottom:3px;background:' +
-      (p >= g ? 'var(--sage)' : p ? 'color-mix(in srgb,var(--sage) 40%,var(--card2))' : 'var(--card2)') + '"></div>' + 'NPWŚCPS'[dt.getDay()] + '</div>';
+      (goalFrac(d) >= 1 ? 'var(--sage)' : p ? 'color-mix(in srgb,var(--sage) 40%,var(--card2))' : 'var(--card2)') + '"></div>' + 'NPWŚCPS'[dt.getDay()] + '</div>';
   }
   return out + '</div>';
 }
@@ -277,7 +282,8 @@ function viewTrophy() {
   }).join('') + '</div>';
   h += sourcesCard();
   h += '<div class="sec"><h2>Ustawienia</h2></div><div class="card settings">' +
-    '<label>Dzienny cel (strony)<input type="number" min="1" max="500" id="setDay" value="' + S.settings.dayGoal + '"></label>' +
+    '<label>Dzienny cel – po polsku (strony)<input type="number" min="1" max="500" id="setDay" value="' + S.settings.dayGoal + '"></label>' +
+    '<label>Dzienny cel – w obcym języku (strony)<input type="number" min="1" max="500" id="setDayFx" value="' + (S.settings.dayGoalFx || 25) + '"></label>' +
     '<label>Roczny cel (książki)<input type="number" min="1" max="500" id="setYear" value="' + S.settings.yearGoal + '"></label>' +
     '<label>Kalendarz lektur<input type="checkbox" id="setCal" class="switch"' + (S.settings.showCal ? ' checked' : '') + '></label>' +
     '<label>Motyw<select id="setTheme" style="width:150px"><option value="dark">Atrament</option><option value="light"' + (S.settings.theme === 'light' ? ' selected' : '') + '>Pergamin</option></select></label>' +
